@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Auto Scroll Site</title>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* Esconde a barra de rolagem original */
+            background-color: #EDF1F6;
+            /* Fundo escuro para caso o site termine antes da rolagem */
+        }
+
+        iframe {
+            width: 100%;
+            /* 
+               Ajuste o valor de "height" para que fique do tamanho exato do conteúdo real do site.
+               Por exemplo: 150vh, 200vh, 300vh.
+            */
+            height: 300vh;
+            /* Ajuste aqui a altura total que o site precisa para não cortar */
+            border: 0;
+            /* 15s é o tempo de ir e voltar (total 30s) */
+            animation: autoScroll 30s ease-in-out infinite alternate;
+        }
+
+        /* Animação que simula a rolagem para cima e para baixo continuamente */
+        @keyframes autoScroll {
+
+            0% {
+                transform: translateY(0);
+            }
+
+            100% {
+                /* Usando calc(-100% + 100vh) garantimos que vai rolar exatamente até o final do iframe, independente da altura (height) que você definir! */
+                transform: translateY(calc(-100% + 100vh));
+            }
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <!-- Aqui você define qual site quer manter na tela -->
+    <iframe id="frame" src="https://whitebox.isso.digital/UwiGFDAXcl5v/"></iframe>
+
+</body>
+
+</html>
