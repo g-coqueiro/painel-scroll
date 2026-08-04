@@ -41,12 +41,68 @@
     <script>
         const IFRAME_HEIGHT_PX = 5942; // <- mesmo valor do height no CSS
         const SCROLL_DURATION_MS = 250000; // 70 segundos por sentido
+        const PAINEL_REFRESH_MS = 30 * 60 * 1000; // recarrega o painel a cada 30 minutos
+        const TOLERANCIA_MS = 10 * 60 * 1000; // se o ciclo travar, recarrega na marra
+        const APP_RELOAD_MS = 24 * 60 * 60 * 1000; // 1x/dia recarrega a própria página
+        const CACHE_BUSTER = true; // adiciona ?_=timestamp para evitar conteúdo em cache
 
         const frame = document.getElementById('frame');
+        const PAINEL_URL = frame.src;
 
         let startTime = null;
         let direction = 1; // 1 = descendo, -1 = subindo
         let currentY = 0;
+
+        // Usa relógio real (não setTimeout), pois timers longos são pausados
+        // ou atrasados quando a máquina suspende ou a aba fica em segundo plano.
+        let proximoRefresh = Date.now() + PAINEL_REFRESH_MS;
+        let proximoReloadApp = Date.now() + APP_RELOAD_MS;
+
+        // Recarrega SÓ o iframe, nunca a página. Assim o documento continua vivo
+        // na memória do navegador: se a rede cair, o painel fica vazio por um
+        // ciclo e se recupera sozinho, em vez de travar na tela de erro.
+        function recarregarPainel() {
+            frame.src = CACHE_BUSTER
+                ? PAINEL_URL + (PAINEL_URL.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now()
+                : PAINEL_URL;
+
+            // Volta a animação para o topo junto com o conteúdo novo
+            startTime = null;
+            direction = 1;
+            currentY = 0;
+            frame.style.transform = 'translateY(0px)';
+
+            proximoRefresh = Date.now() + PAINEL_REFRESH_MS;
+        }
+
+        // Reload da própria página só depois de confirmar que ela está acessível.
+        // Sem essa checagem, um reload durante queda de rede deixaria a TV parada
+        // na tela de erro do navegador até alguém ir lá mexer.
+        function reloadAppSeGuro() {
+            if (navigator.onLine === false) return;
+
+            fetch(location.href, { cache: 'no-store' })
+                .then(function (r) { if (r.ok) location.reload(); })
+                .catch(function () { /* rede fora: tenta de novo no próximo tick */ });
+        }
+
+        // Watchdog: se o rAF travar (tela apagada, aba oculta, GPU dormindo), o
+        // refresh elegante no topo do ciclo nunca aconteceria. setInterval também
+        // é estrangulado em segundo plano, mas continua disparando de tempos em tempos.
+        setInterval(function () {
+            if (Date.now() >= proximoRefresh + TOLERANCIA_MS) recarregarPainel();
+
+            if (Date.now() >= proximoReloadApp) {
+                proximoReloadApp = Date.now() + APP_RELOAD_MS; // evita tentar a cada 30s
+                reloadAppSeGuro();
+            }
+        }, 30000);
+
+        // Se a aba voltar a ficar visível depois de muito tempo oculta,
+        // atualiza na hora para não exibir dado velho.
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden && Date.now() >= proximoRefresh) recarregarPainel();
+        });
 
         function animate(timestamp) {
             if (startTime === null) startTime = timestamp;
@@ -68,6 +124,12 @@
             if (progress >= 1) {
                 direction *= -1;
                 startTime = null;
+
+                // Voltou ao topo e o prazo já expirou -> troca o conteúdo agora,
+                // que é o único momento em que a recarga não corta a animação.
+                if (direction === 1 && Date.now() >= proximoRefresh) {
+                    recarregarPainel();
+                }
             }
 
             requestAnimationFrame(animate);
