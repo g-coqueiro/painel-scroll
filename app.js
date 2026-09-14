@@ -64,7 +64,7 @@ const CONFIG = {
     // Mostra por alguns segundos, no canto da tela, em qual modo a página
     // entrou e qual altura ela está enxergando. Só na primeira carga (a página
     // recarrega 1x/dia), então não polui a TV. 0 desliga.
-    debugBadgeMs: 20000
+    debugBadgeMs: 90000
 };
 
 const frame = document.getElementById('frame');
@@ -164,9 +164,22 @@ function injectInnerCss(doc) {
 // assim cair no fallback. O único jeito de ver isso na TV é a própria página
 // dizer em que modo entrou, e qual altura está medindo.
 function textoBadge() {
-    return mode === 'medido'
-        ? 'altura automática · ' + Math.round(alturaConteudo()) + 'px medidos no dashboard'
-        : 'altura fixa · ' + CONFIG.fallbackHeightPx + 'px (sem permissão para medir)';
+    const caixa = frame.getBoundingClientRect();
+    const partes = [
+        'janela ' + window.innerWidth + '×' + window.innerHeight,
+        'zoom ' + (window.devicePixelRatio || 1),
+        'iframe ' + Math.round(caixa.width) + '×' + Math.round(caixa.height)
+    ];
+
+    const doc = innerDocument();
+    if (doc) {
+        partes.push('dashboard ' + doc.documentElement.clientWidth +
+                    '×' + Math.round(alturaConteudo()) + ' (medido)');
+    } else {
+        partes.push('altura fixa ' + CONFIG.fallbackHeightPx + ' (sem permissão)');
+    }
+
+    return partes.join(' · ');
 }
 
 function mostrarBadge() {

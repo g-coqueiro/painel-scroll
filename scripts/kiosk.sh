@@ -91,6 +91,9 @@ while true; do
       --disable-web-security \
       --user-data-dir="$PROFILE" \
       --no-first-run \
+      --window-position=0,0 \
+      --window-size=1920,1080 \
+      --start-fullscreen \
       "$URL" &
       # Se aparecer a infobar "flag nao suportada" na TV, acrescente --test-type
       # na lista acima (suprime esse aviso especifico).
