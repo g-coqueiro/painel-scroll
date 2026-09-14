@@ -47,11 +47,12 @@ Fases 1 e 2 implementadas no repositório (ainda **não instaladas no RPi** — 
 
 - `index.html` (esqueleto), `style.css` e `app.js` — passou de 300 linhas com o slideshow e
   foi separado conforme §8. Todo o `CONFIG` vive no topo do `app.js`.
-- Dois modos, escolhidos a cada carga do iframe:
-  - `inner` (Chromium do kiosk, com `--disable-web-security`): iframe em `100vh`, scroll via
-    `contentWindow.scrollTo`, altura lida do documento a cada quadro, reload ao fim do ciclo.
-  - `outer` (qualquer navegador normal, inclusive GitHub Pages): comportamento antigo —
-    altura fixa `CONFIG.fallbackHeightPx` e `translateY`. É o fallback do §3.5.
+- O iframe é **sempre** alto o bastante para o conteúdo inteiro e o scroll é **sempre**
+  `translateY`. O que muda entre os dois modos é só de onde vem o número da altura:
+  - `medido`: a permissão do kiosk deixa ler `scrollHeight` do dashboard. Altura
+    reconferida 1×/s durante o scroll; escrita no elemento só quando muda.
+  - `fixo`: sem permissão (navegador comum, GitHub Pages), usa `CONFIG.fallbackHeightPx`.
+    É o fallback do §3.5.
 - Slideshow entre ciclos, lendo `images/manifest.json`; manifest vazio, ausente ou corrompido
   faz o painel pular o slideshow em silêncio.
 - `scripts/kiosk.sh` (boot) e `scripts/sync-images.sh` (rclone + manifest) versionados.
@@ -63,8 +64,11 @@ whitebox), `translateY` no iframe inteiro e refresh do iframe a cada 30 min por 
 O problema raiz era a altura manual: quando o colega adicionava gráficos, o final ficava
 cortado até alguém medir de novo e fazer commit.
 
-**Ainda em aberto:** `translateY` em um iframe de ~7700px é caro para o RPi 4 — some no modo
-`inner` (que usa scroll nativo), mas continua valendo no fallback.
+**Ainda em aberto:**
+- `translateY` em um iframe de ~9400px é caro para o RPi 4. Vale nos dois modos, já que
+  encolher o iframe não é opção (§4.2). Não deu problema visível até agora.
+- Instalado no RPi em 2026-09-14, mas ainda em `modo-fixo`: falta confirmar que o
+  `--disable-site-isolation-trials` liberou a leitura. Só então a Fase 1 está entregue.
 
 ### 4.1 Como o RPi sobe o painel hoje (não quebrar isto)
 
