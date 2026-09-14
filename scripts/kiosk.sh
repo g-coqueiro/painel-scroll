@@ -47,13 +47,14 @@ fi
 
 # 3. Servidor estatico local. Servir por http:// (e nao file://) e o que permite
 #    ler o manifest das imagens sem CORS e funcionar sem internet.
-if ! pgrep -f "http.server $PORT" >/dev/null; then
-  # O log do http.server e o canal de diagnostico: a pagina pede uma URL
-  # /__diag/... com os numeros dela, que aparece aqui. Ver reportarDiagnostico().
+if ! pgrep -f "serve.py $PORT" >/dev/null; then
+  # serve.py em vez de `python3 -m http.server`: o servidor padrao deixa o
+  # Chromium cachear o app.js, e a TV continuava rodando codigo antigo depois
+  # de um git pull. O log dele tambem e o canal de diagnostico: a pagina pede
+  # uma URL /__diag/... com os numeros dela. Ver reportarDiagnostico().
   [ -f "$HTTPLOG" ] && [ "$(stat -c%s "$HTTPLOG")" -gt 1048576 ] && : > "$HTTPLOG"
-  python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$REPO" \
-    >>"$HTTPLOG" 2>&1 &
-  log "http.server iniciado na porta $PORT"
+  python3 "$REPO/scripts/serve.py" "$PORT" "$REPO" >>"$HTTPLOG" 2>&1 &
+  log "servidor iniciado na porta $PORT"
 fi
 
 # Espera a porta responder antes de abrir o navegador (ate ~5 s).

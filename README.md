@@ -191,8 +191,12 @@ da própria página: `frame.contentDocument` — se vier um documento, está no 
 Sem build step, sem dependências. Para testar na máquina local:
 
 ```bash
-python3 -m http.server 8080 --directory .
+python3 scripts/serve.py 8080 .
 ```
+
+(É o mesmo servidor que roda no RPi. Ele desliga o cache: sem isso o navegador
+continua rodando o `app.js` antigo depois de uma alteração, o que já custou uma
+rodada inteira de diagnóstico no projeto.)
 
 Abra <http://localhost:8080/>. Em um navegador normal a página roda no modo `outer`
 (fallback), que é exatamente o comportamento que a TV terá se a flag falhar — é o

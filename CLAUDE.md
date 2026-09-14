@@ -112,6 +112,9 @@ Com o zoom em 150% a largura efetiva é 1280 e **a altura real é outra**. Enqua
 o modo `medido` não funcionar, esse número precisa ser remedido na largura efetiva.
 
 **Armadilhas ao alterar essa cadeia:**
+- O servidor (`scripts/serve.py`) manda `Cache-Control: no-store` e ignora revalidação
+  condicional. Não voltar para o `http.server` padrão: o Chromium cacheia o `app.js` e a
+  TV passa a rodar código que não é mais o do repositório.
 - `git pull` NÃO aplica mudanças no `kiosk.sh`: o loop já está rodando em memória
   com a versão anterior e só troca no próximo boot. Mudança em `app.js`/`index.html`/
   `style.css` basta `pull` + `pkill -f chromium`; mudança no `kiosk.sh` exige reboot.
@@ -339,3 +342,4 @@ Perguntar ao usuário antes de assumir:
 | 2026-09-14 | Documentado que o layout do whitebox depende da largura em px CSS (§4.2) | Causa real das tarjas laterais; custou duas correções erradas antes de aparecer |
 | 2026-09-14 | Painel registra diagnóstico em `~/http.log` via `/__diag/...` | Ler o selo na TV é ambíguo — a primeira leitura veio de outro navegador e quase gerou um terceiro palpite errado |
 | 2026-09-14 | Isolamento de sites desligado junto com `--disable-web-security` | Só a segunda flag dá acesso real ao DOM do iframe; confirmado com dado da TV |
+| 2026-09-14 | `scripts/serve.py` substitui `python3 -m http.server` | O servidor padrão deixava o Chromium cachear o `app.js`: depois de um `git pull` a TV seguia rodando código antigo, silenciosamente. Um deploy tem que ser um deploy |
