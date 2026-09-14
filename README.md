@@ -14,7 +14,7 @@ Boot → autologin no desktop → ~/.config/autostart/kiosk.desktop
   → ~/painel-scroll/scripts/kiosk.sh
       1. espera a rede
       2. git pull (com timeout; se falhar, usa a cópia local)
-      3. sobe python3 -m http.server 8080 servindo o repositório
+      3. sobe scripts/serve.py na porta 8080, servindo o repositório
       4. loop: mantém o Chromium aberto em http://localhost:8080/?painel-scroll-kiosk
 Cron 04:00 → pkill -f chromium → o loop reabre o navegador limpo
 ```
@@ -30,19 +30,24 @@ O ciclo do painel:
 ```
 
 Os arquivos: `index.html` (esqueleto), `style.css`, `app.js` (toda a lógica, com o `CONFIG`
-no topo), `scripts/kiosk.sh` (boot) e `scripts/sync-images.sh` (imagens do Drive).
+no topo), `scripts/kiosk.sh` (boot), `scripts/serve.py` (servidor local) e
+`scripts/sync-images.sh` (imagens do Drive).
 
-A página opera em dois modos e escolhe sozinha a cada carga do iframe:
+O iframe é **sempre** alto o bastante para o dashboard inteiro, e o scroll é **sempre**
+`translateY`. O que muda entre os dois modos é só de onde vem o número da altura:
 
-| Modo | Quando | Altura | Scroll |
-|---|---|---|---|
-| `inner` | Chromium com `--disable-web-security` (o do kiosk) | lida em tempo real do documento | `contentWindow.scrollTo` |
-| `outer` | qualquer navegador normal, incluindo GitHub Pages | fixa, `CONFIG.fallbackHeightPx` | `translateY` no iframe |
+| Modo | Quando | Altura |
+|---|---|---|
+| `medido` | Chromium do kiosk, com as flags de permissão | lida do dashboard, reconferida a cada segundo |
+| `fixo` | qualquer navegador normal, incluindo GitHub Pages | `CONFIG.fallbackHeightPx` |
 
-No modo `inner` o painel acompanha o crescimento do dashboard sozinho: ninguém precisa
-medir altura nem fazer commit quando um gráfico novo é adicionado. O modo `outer` é o
-fallback — funciona como antes, com a altura manual, e garante que a TV não fica preta
-se a flag deixar de existir em uma atualização do Chromium.
+No modo `medido` ninguém precisa medir altura nem fazer commit quando um gráfico novo é
+adicionado — é o objetivo da Fase 1. O modo `fixo` é o fallback: garante que a TV não fica
+preta se as flags deixarem de funcionar numa atualização do Chromium.
+
+**Não encolher o iframe para `100vh` para rolar por dentro.** O whitebox se redesenha
+conforme o tamanho do viewport e o painel fica desfigurado. A permissão serve para medir,
+não para rolar.
 
 Todos os parâmetros ajustáveis (URL, durações, altura de fallback, CSS injetado,
 tempo por imagem) estão no objeto `CONFIG`, no topo do `app.js`.
@@ -62,7 +67,7 @@ sudo raspi-config
 
 ```bash
 git clone https://github.com/g-coqueiro/painel-scroll.git ~/painel-scroll
-chmod +x ~/painel-scroll/scripts/kiosk.sh
+chmod +x ~/painel-scroll/scripts/*.sh ~/painel-scroll/scripts/serve.py
 ```
 
 **3. Autostart**
@@ -161,6 +166,7 @@ tail -f ~/kiosk.log                  # o que o kiosk.sh fez no boot e nos relan�
 tail -f ~/sync-images.log            # última sincronização do Drive
 pgrep -af painel-scroll-kiosk        # o Chromium está vivo?
 curl -sI http://localhost:8080/      # o servidor local está de pé?
+pgrep -af serve.py                   # quem está servindo a página
 curl -s http://localhost:8080/images/manifest.json   # o que o painel vai exibir
 ```
 
@@ -171,15 +177,30 @@ export WAYLAND_DISPLAY=wayland-0
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 ```
 
-Para conferir em qual modo a página entrou, abra o DevTools na TV ou rode no console
-da própria página: `frame.contentDocument` — se vier um documento, está no modo `inner`.
+Para saber em que estado a página está **sem olhar a TV**, o painel registra os próprios
+números no log do servidor a cada carga:
+
+```bash
+grep __diag ~/http.log | tail -2
+```
+
+```
+/__diag/assentado__janela-1280x720__zoom-1.5__modo-medido__medida-9399__altura-9399__dashboard-1280
+```
+
+- `janela` × `zoom` tem que dar 1920×1080. Se não der, a janela não está cobrindo a TV.
+- `modo-medido` = está lendo o dashboard. `modo-fixo` = as flags de permissão não pegaram.
+- `medida` igual a `altura` = o número em uso veio de leitura real. Diferentes = caiu no fallback.
+- Sai duas vezes por carga: `carregou` e, 45 s depois, `assentado` (gráficos já desenhados).
 
 ### Problemas comuns
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
-| Fim do dashboard cortado | caiu no modo `outer` (flag não aplicada) | conferir se `--disable-web-security` e `--user-data-dir` estão na linha de comando do Chromium (`pgrep -af chromium`) |
-| Tela em branco | servidor local não subiu | `tail ~/kiosk.log`, checar `python3 -m http.server` |
+| **Tarjas laterais, dashboard estreito** | zoom do Chromium voltou a 100% | o whitebox precisa de ~1280px CSS de largura: pôr o zoom em 150% (`Ctrl +`). O zoom mora no perfil, então some se `~/kiosk-profile` for apagado |
+| Fim do dashboard cortado | caiu no modo `fixo` | `grep __diag ~/http.log`; conferir `--disable-web-security`, `--disable-site-isolation-trials` e `--user-data-dir` em `pgrep -af chromium` |
+| Mudança não aparece depois do `git pull` | alteração foi no `kiosk.sh` | `pull` só aplica `app.js`/`index.html`/`style.css` (+ `pkill -f chromium`). `kiosk.sh` exige `sudo reboot` |
+| Tela em branco | servidor local não subiu | `tail ~/kiosk.log`, checar `pgrep -af serve.py` |
 | Chromium não relança sozinho | padrão do `pgrep` batendo em outro processo | o padrão precisa ser exclusivo da URL (`painel-scroll-kiosk`) |
 | Gráfico novo não aparece | reload ainda não ocorreu | acontece ao fim de cada ciclo de scroll; `CONFIG.reloadOnCycleEnd` |
 | Slideshow não aparece | manifest vazio ou sync falhando | `tail ~/sync-images.log`, depois `rclone ls gdrive:` |
