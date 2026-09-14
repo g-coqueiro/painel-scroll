@@ -99,20 +99,25 @@ outro. Quem tem acesso à pasta sobe imagem lá; em até 10 min ela aparece na T
 > O ID da pasta **não fica no repositório** — ele é um link de acesso e o repo é público.
 > Ele vive só no `~/.config/rclone/rclone.conf` do RPi, que não é versionado.
 
-Instale o rclone e gere o token em um PC **com navegador** (o RPi é headless):
+Instale o rclone no RPi:
 
 ```bash
 sudo apt install rclone
 ```
 
-No PC com navegador, com o rclone instalado:
+> **A autorização precisa ser feita pelo rclone do próprio RPi.** Gerar o token em outra
+> máquina e colar aqui **não funciona**: cada instalação do rclone tem uma identidade de
+> aplicativo diferente perante o Google, e a resposta é
+> `invalid_client: The provided client secret is invalid`. O que falta no RPi é só o
+> navegador — e dá para emprestar o do seu PC por um túnel SSH.
+
+Reconecte no RPi com o túnel (é o `ssh` de sempre, com um trecho a mais):
 
 ```bash
-rclone authorize "drive"
+ssh -L 53682:localhost:53682 gcoqueiro@painelscroll.local
 ```
 
-Faça login com a conta que tem acesso à pasta e copie o token que aparece no terminal.
-De volta ao RPi:
+Já dentro do RPi:
 
 ```bash
 rclone config
@@ -124,11 +129,15 @@ rclone config
 - `scope`: **2** (`drive.readonly`) — o painel só lê a pasta, nunca escreve nela. Com o
   escopo 1 (acesso total), um erro de digitação no script poderia apagar arquivos no Drive
 - configuração avançada: **y**, e em `root_folder_id` cole o ID da pasta — é o trecho da
-  URL do Drive depois de `/folders/`
-- "Use auto config?": **n**, e cole o token gerado no outro PC
+  URL do Drive depois de `/folders/`. O resto: Enter até o fim
+- **"Use auto config?": `y`** (por causa do túnel, ao contrário do que parece)
 
-Se a pasta for de outra pessoa e você preferir não usar o `root_folder_id`, use
-`shared_with_me = true` no lugar.
+O rclone vai imprimir uma URL começando com `http://127.0.0.1:53682/auth?state=...`.
+Copie e abra **no navegador do seu PC**: o túnel entrega a resposta ao RPi. Faça login com
+a conta que tem acesso à pasta e autorize.
+
+Se uma janela de navegador abrir na TV durante o processo, não tem problema — ao terminar,
+`pkill -f chromium` devolve o painel ao normal em até 20 s.
 
 Teste e agende:
 
@@ -206,6 +215,7 @@ grep __diag ~/http.log | tail -2
 | Slideshow não aparece | manifest vazio ou sync falhando | `tail ~/sync-images.log`, depois `rclone ls gdrive:` |
 | Imagem some da TV mas está no Drive | extensão fora da lista | só `.jpg`, `.jpeg`, `.png` e `.webp` são sincronizados |
 | Sync para de apagar imagens | trava do `--max-delete` disparou | mais de 20 remoções de uma vez; conferir a pasta e rodar o script à mão |
+| `invalid_client` no rclone | token gerado por outra instalação do rclone | refazer a autorização pelo rclone do próprio RPi, com o túnel SSH acima |
 
 ## Desenvolvimento
 
