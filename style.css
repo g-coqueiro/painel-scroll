@@ -53,3 +53,22 @@ body {
 #slide.visivel {
     opacity: 1;
 }
+
+#badge {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 10;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #fff;
+    background-color: rgba(17, 24, 39, .85);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--fade-ms) ease;
+}
+
+#badge.visivel {
+    opacity: 1;
+}

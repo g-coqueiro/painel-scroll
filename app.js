@@ -54,12 +54,20 @@ const CONFIG = {
     appReloadMs: 24 * 60 * 60 * 1000,
 
     // Intervalo do watchdog (setInterval sobrevive ao rAF congelado).
-    watchdogIntervalMs: 30000
+    watchdogIntervalMs: 30000,
+
+    // --- Diagnóstico ---
+
+    // Mostra por alguns segundos, no canto da tela, em qual modo a página
+    // entrou e qual altura ela está enxergando. Só na primeira carga (a página
+    // recarrega 1x/dia), então não polui a TV. 0 desliga.
+    debugBadgeMs: 20000
 };
 
 const frame = document.getElementById('frame');
 const slideshow = document.getElementById('slideshow');
 const slide = document.getElementById('slide');
+const badge = document.getElementById('badge');
 
 let mode = 'outer';        // 'inner' = same-origin (altura real) | 'outer' = fallback
 let phase = 'loading';     // loading | pause | scroll | slideshow
@@ -67,6 +75,7 @@ let direction = 1;         // 1 = descendo, -1 = subindo
 let phaseStart = null;     // timestamp do rAF em que a fase começou
 let slideshowAtivo = false;
 let iframeCarregando = false;
+let badgeJaMostrado = false;
 let lastTick = Date.now();
 let nextAppReload = Date.now() + CONFIG.appReloadMs;
 
@@ -98,17 +107,27 @@ function innerDocument() {
     }
 }
 
-function maxScroll() {
+function alturaConteudo() {
     if (mode === 'inner') {
         const doc = innerDocument();
         if (!doc) return 0;
-        const altura = Math.max(
+        return Math.max(
             doc.documentElement.scrollHeight,
             doc.body ? doc.body.scrollHeight : 0
         );
-        return Math.max(0, altura - frame.contentWindow.innerHeight);
     }
-    return Math.max(0, CONFIG.fallbackHeightPx - window.innerHeight);
+    return CONFIG.fallbackHeightPx;
+}
+
+function alturaVisivel() {
+    if (mode === 'inner') {
+        try { return frame.contentWindow.innerHeight; } catch (e) { /* cai fora */ }
+    }
+    return window.innerHeight;
+}
+
+function maxScroll() {
+    return Math.max(0, alturaConteudo() - alturaVisivel());
 }
 
 function applyScroll(y) {
@@ -128,6 +147,35 @@ function injectInnerCss(doc) {
     } catch (e) {
         /* dashboard ainda protegido: segue sem o CSS */
     }
+}
+
+// Selo de diagnóstico: a flag do Chromium pode estar ativa e a página ainda
+// assim cair no fallback. O único jeito de ver isso na TV é a própria página
+// dizer em que modo entrou, e qual altura está medindo.
+function textoBadge() {
+    return mode === 'inner'
+        ? 'modo inner · altura lida do dashboard: ' + Math.round(alturaConteudo()) + 'px'
+        : 'modo outer (fallback) · altura fixa: ' + CONFIG.fallbackHeightPx + 'px';
+}
+
+function mostrarBadge() {
+    if (!CONFIG.debugBadgeMs || badgeJaMostrado) return;
+    badgeJaMostrado = true;
+
+    badge.textContent = textoBadge();
+    badge.hidden = false;
+    void badge.offsetWidth; // força o reflow para a transição valer
+    badge.classList.add('visivel');
+
+    // O dashboard ainda está desenhando os gráficos: o número cresce nos
+    // primeiros segundos até assentar.
+    const atualiza = setInterval(function () { badge.textContent = textoBadge(); }, 1000);
+
+    setTimeout(function () {
+        clearInterval(atualiza);
+        badge.classList.remove('visivel');
+        setTimeout(function () { badge.hidden = true; }, CONFIG.imageFadeMs);
+    }, CONFIG.debugBadgeMs);
 }
 
 function recarregarDashboard() {
@@ -155,6 +203,7 @@ frame.addEventListener('load', function () {
     }
 
     lastTick = Date.now();
+    mostrarBadge();
 
     // Durante o slideshow o dashboard recarrega escondido atrás do overlay.
     // Quem retoma o scroll é o fim do slideshow, não este handler.
