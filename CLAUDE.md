@@ -43,15 +43,19 @@ do dono do código. Qualquer proposta que quebre isso precisa de justificativa f
 
 ## 4. Estado atual (setembro/2026)
 
-Fase 1 implementada no repositório (ainda **não instalada no RPi** — ver §6).
+Fases 1 e 2 implementadas no repositório (ainda **não instaladas no RPi** — ver §6).
 
-- `index.html` com um único objeto `CONFIG` e dois modos, escolhidos a cada carga do iframe:
+- `index.html` (esqueleto), `style.css` e `app.js` — passou de 300 linhas com o slideshow e
+  foi separado conforme §8. Todo o `CONFIG` vive no topo do `app.js`.
+- Dois modos, escolhidos a cada carga do iframe:
   - `inner` (Chromium do kiosk, com `--disable-web-security`): iframe em `100vh`, scroll via
     `contentWindow.scrollTo`, altura lida do documento a cada quadro, reload ao fim do ciclo.
   - `outer` (qualquer navegador normal, inclusive GitHub Pages): comportamento antigo —
     altura fixa `CONFIG.fallbackHeightPx` e `translateY`. É o fallback do §3.5.
-- `scripts/kiosk.sh` e `scripts/kiosk.desktop` versionados.
-- `README.md` com instalação no RPi e diagnóstico.
+- Slideshow entre ciclos, lendo `images/manifest.json`; manifest vazio, ausente ou corrompido
+  faz o painel pular o slideshow em silêncio.
+- `scripts/kiosk.sh` (boot) e `scripts/sync-images.sh` (rclone + manifest) versionados.
+- `README.md` com instalação no RPi, setup do rclone e diagnóstico.
 
 **Estado anterior, para referência** (o que a Fase 1 resolveu): um `index.html` de ~140 linhas
 com `height` fixo no CSS e duplicado numa constante JS (7692px, medido à mão no console do
@@ -179,18 +183,29 @@ Notas de setup do rclone:
 Comportamento do painel (loop):
 
 ```
-1. Scroll do dashboard: desce → sobe (SCROLL_DURATION_MS por sentido)
-2. Slideshow: cada imagem do manifest por IMAGE_DURATION_MS, tela cheia,
+1. Scroll do dashboard: desce → sobe (CONFIG.scrollDurationMs por sentido)
+2. Lê o manifest (dashboard ainda parado no topo, nada recarregando)
+   ├─ vazio/inacessível → recarrega o dashboard e volta ao passo 1
+   └─ com imagens → segue
+3. Overlay entra em fade
+4. Reload do iframe do dashboard ATRÁS do overlay (pega gráficos novos)
+5. Slideshow: cada imagem por CONFIG.imageDurationMs, tela cheia,
    object-fit: contain, fundo #EDF1F6 (mesmo do dashboard). Fade simples.
-3. Reload do iframe do dashboard (pega gráficos novos)
-4. Volta ao passo 1
+6. Overlay sai; o dashboard já está carregado. Volta ao passo 1
 ```
+
+O reload no passo 4 (e não depois do slideshow, como estava planejado) é deliberado: o
+iframe leva segundos para recarregar e piscaria em branco na frente de todo mundo. Atrás
+do overlay, some.
 
 Regras:
 - Manifest vazio ou inacessível → pula o slideshow silenciosamente, não quebra o loop.
 - Ordem: alfabética pelo nome do arquivo (o colega controla a ordem com prefixo `01_`, `02_`...).
 - Parâmetros (durações, caminho do manifest, URL do dashboard) centralizados em um único objeto
-  `CONFIG` no topo do JS ou em `config.json` — nunca espalhados.
+  `CONFIG` no topo do `app.js` — nunca espalhados.
+- Imagem que não carrega é pulada; manifest corrompido é tratado como vazio. Tanto o fetch do
+  manifest quanto cada imagem têm timeout: sem isso, um arquivo que nunca responde deixaria a
+  TV presa no slideshow para sempre.
 
 Descartado: pasta `images/` no repo listada pela API do GitHub (exigiria conta GitHub do dono do
 conteúdo e tem atraso de deploy).
@@ -227,9 +242,11 @@ Entregas da Fase 1, em ordem:
    confirmar que a página entra no modo `inner` e que não aparece infobar de flag.
 
 Entregas da Fase 2:
-1. `scripts/sync-images.sh` (rclone sync + geração do manifest) e linha de cron.
-2. Slideshow no `index.html` conforme §5.3, com fallback silencioso.
-3. Seção do README sobre configurar o rclone e a pasta do Drive.
+1. [x] `scripts/sync-images.sh` (rclone sync + geração do manifest) e linha de cron.
+2. [x] Slideshow conforme §5.3, com fallback silencioso.
+3. [x] Seção do README sobre configurar o rclone e a pasta do Drive.
+4. [ ] **rclone autorizado no Drive** (passo manual do usuário, exige um PC com navegador)
+   e validação na TV.
 
 ## 7. Decisões em aberto
 
@@ -275,3 +292,8 @@ Perguntar ao usuário antes de assumir:
 | 2026-09-14 | Reload do iframe por ciclo substitui o timer de 30 min | Alinha a recarga ao único instante que não corta a animação; o watchdog cobre o caso de ciclo travado |
 | 2026-09-14 | `http.server` com `--bind 127.0.0.1` | O painel não precisa ser acessível pela rede da fábrica |
 | 2026-09-14 | CLAUDE.md passa a viver no repositório | Era mantido solto em `Downloads`, fora do versionamento |
+| 2026-09-14 | Código separado em `index.html` + `style.css` + `app.js` | Passou de ~300 linhas com o slideshow; regra do §8 |
+| 2026-09-14 | ID da pasta do Drive fica só no `rclone.conf` do RPi, nunca no repo | O repo é público e o ID é um link de acesso (§3.4). O script referencia apenas o remote `gdrive:` |
+| 2026-09-14 | Reload do dashboard acontece **atrás** do overlay do slideshow, não antes | Ordem do §5.3 invertida de propósito: recarregar antes deixava o iframe piscando em branco à vista enquanto o manifest não respondia |
+| 2026-09-14 | Manifest regenerado sempre a partir do disco, mesmo se o rclone falhar | Evita manifest apontando para arquivo que não existe |
+| 2026-09-14 | `rclone sync` com `--max-delete 20` | Um erro de permissão que faça o remote responder vazio apagaria todas as imagens da TV de uma vez |

@@ -1,0 +1,55 @@
+/* --fade-ms e definido pelo app.js a partir de CONFIG.imageFadeMs. */
+:root {
+    --fade-ms: 600ms;
+    --fundo: #EDF1F6;
+}
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--fundo);
+}
+
+#frame {
+    width: 100%;
+    border: 0;
+    display: block;
+    /* Altura definida pelo app.js: 100vh no modo same-origin,
+       altura fixa de fallback no modo cross-origin. */
+    height: 100vh;
+}
+
+#slideshow {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--fundo);
+    opacity: 0;
+    /* visibility evita que o overlay invisivel capture qualquer coisa e
+       garante que ele saia da arvore de renderizacao entre os ciclos. */
+    visibility: hidden;
+    transition: opacity var(--fade-ms) ease, visibility 0s linear var(--fade-ms);
+}
+
+#slideshow.visivel {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity var(--fade-ms) ease, visibility 0s;
+}
+
+#slide {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity var(--fade-ms) ease;
+}
+
+#slide.visivel {
+    opacity: 1;
+}
