@@ -103,8 +103,25 @@ slides: [
 ],
 ```
 
-Para acrescentar um slide: colocar o arquivo em `slides/`, acrescentar a linha no `CONFIG`,
-commitar. No RPi, `git pull && pkill -f chromium`.
+> **A pasta `slides/` está no `.gitignore` e não vai para o GitHub.** Os slides trazem nomes
+> de funcionários e fotos internas, e o repositório é público — o histórico do git é
+> permanente, então apagar depois não resolveria. Eles vivem só no RPi.
+
+Para acrescentar um slide:
+
+1. copie o arquivo para o RPi:
+
+```bash
+scp meu-slide.html gcoqueiro@10.8.3.161:~/painel-scroll/slides/
+```
+
+2. acrescente a linha em `CONFIG.slides` (no `app.js`, que é versionado), commite e no RPi:
+
+```bash
+git -C ~/painel-scroll pull && pkill -f chromium
+```
+
+Como a pasta é ignorada pelo git, o `git pull` não mexe nos slides já copiados.
 
 Regras dos slides:
 

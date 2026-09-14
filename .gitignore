@@ -1,3 +1,6 @@
+# Slides: contem nomes de funcionarios e fotos internas. O repo e publico e o
+# historico do git e permanente, entao eles vivem so no RPi (copiados por scp).
+slides/
 
 # Config local do Claude Code / preview (nao vai para o RPi)
 .claude/

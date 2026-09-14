@@ -210,7 +210,10 @@ slides/*.html  →  CONFIG.slides (app.js)  →  exibidos entre os ciclos de scr
   por causa do zoom do kiosk (§4.2).
 - Duração por slide em `CONFIG.slides[].durationMs` (hoje 45 s cada).
 - Slide ausente ou que não carrega é pulado em silêncio; lista vazia = só dashboard.
-- Publicar um slide novo = commit + `git pull` no RPi.
+- **Os arquivos dos slides NÃO vão para o repositório** (`slides/` no `.gitignore`): trazem
+  nomes de funcionários e fotos internas, e o repo é público com histórico permanente.
+  Vivem só no RPi, copiados por `scp`. A *lista* (`CONFIG.slides`) é versionada.
+- Publicar um slide novo = `scp` do arquivo + commit da linha no `CONFIG` + `git pull` no RPi.
 
 **Consequência para o §2:** isto inverte o princípio de produto. O dono do conteúdo não
 adiciona mais nada sozinho — passa pelo dono do código. Foi uma escolha consciente do
@@ -301,6 +304,7 @@ Perguntar ao usuário antes de assumir:
 | 2026-09-14 | Descartado scraping do DOM do whitebox | Frágil e não dá autonomia a ninguém |
 | 2026-09-14 | Imagens via Google Drive + rclone no RPi | Ambos os donos usam Drive; sem chave exposta; alternativa via repo GitHub descartada |
 | 2026-09-14 | **Revertido:** rclone/Drive sai, entram slides HTML versionados (§5.3) | Escolha editorial do usuário: controlar o que entra em vez de deixar a pasta aberta. Custo assumido: inverte o princípio do §2 |
+| 2026-09-14 | Arquivos dos slides fora do git, só no RPi via `scp` | Contêm nomes de funcionários e fotos internas; repo público tem histórico permanente. Mesma lição da chave exposta em outro repo |
 | 2026-09-14 | Slides em iframe de 1920×1080 encolhido por `transform: scale()` | Layout fixo precisa da resolução nativa para se desenhar certo; a escala resolve o zoom do kiosk sem tocar no HTML do slide |
 | 2026-09-14 | Slideshow entre ciclos de scroll | Escolha do usuário |
 | 2026-09-14 | Documentada a cadeia de boot atual (§4.1) | Evitar quebrar autostart/pgrep/Preferences ao migrar para localhost |
