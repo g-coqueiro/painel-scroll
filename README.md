@@ -99,25 +99,32 @@ outro. Quem tem acesso à pasta sobe imagem lá; em até 10 min ela aparece na T
 > O ID da pasta **não fica no repositório** — ele é um link de acesso e o repo é público.
 > Ele vive só no `~/.config/rclone/rclone.conf` do RPi, que não é versionado.
 
-Instale o rclone no RPi:
+> **As duas máquinas precisam da MESMA versão do rclone.** O token é emitido para uma
+> identidade de aplicativo, e a versão do `apt` do Debian não bate com a oficial —
+> resultado: `invalid_client: The provided client secret is invalid`.
+
+No RPi, instale a versão oficial (a do `apt` é antiga demais):
 
 ```bash
-sudo apt install rclone
+cd /tmp && curl -O https://downloads.rclone.org/rclone-current-linux-arm64.zip && unzip -o rclone-current-linux-arm64.zip
 ```
-
-> **A autorização precisa ser feita pelo rclone do próprio RPi.** Gerar o token em outra
-> máquina e colar aqui **não funciona**: cada instalação do rclone tem uma identidade de
-> aplicativo diferente perante o Google, e a resposta é
-> `invalid_client: The provided client secret is invalid`. O que falta no RPi é só o
-> navegador — e dá para emprestar o do seu PC por um túnel SSH.
-
-Reconecte no RPi com o túnel (é o `ssh` de sempre, com um trecho a mais):
 
 ```bash
-ssh -L 53682:localhost:53682 gcoqueiro@painelscroll.local
+sudo cp /tmp/rclone-*-linux-arm64/rclone /usr/local/bin/ && sudo chmod 755 /usr/local/bin/rclone && hash -r && rclone version | head -1
 ```
 
-Já dentro do RPi:
+No PC (com navegador), instale a mesma versão — `winget install Rclone.Rclone` no Windows —
+confirme com `rclone version` e gere o token:
+
+```bash
+rclone authorize "drive" --drive-scope=drive.readonly
+```
+
+Se aparecer o aviso de que o `client_id` compartilhado está sendo aposentado, responda **`y`**
+(veja o prazo em CLAUDE.md §7). O navegador abre; autorize e copie o bloco
+`{"access_token":...}` inteiro.
+
+De volta ao RPi:
 
 ```bash
 rclone config
@@ -125,19 +132,13 @@ rclone config
 
 - `n` (novo remote), nome: **gdrive**
 - tipo: **drive**
-- `client_id` e `client_secret`: em branco
-- `scope`: **2** (`drive.readonly`) — o painel só lê a pasta, nunca escreve nela. Com o
-  escopo 1 (acesso total), um erro de digitação no script poderia apagar arquivos no Drive
+- "Continue using the shared client_id anyway?" → **`y`** (o padrão é não)
+- `scope`: **2** (`drive.readonly`) — o painel só lê a pasta, nunca escreve nela
 - configuração avançada: **y**, e em `root_folder_id` cole o ID da pasta — é o trecho da
   URL do Drive depois de `/folders/`. O resto: Enter até o fim
-- **"Use auto config?": `y`** (por causa do túnel, ao contrário do que parece)
-
-O rclone vai imprimir uma URL começando com `http://127.0.0.1:53682/auth?state=...`.
-Copie e abra **no navegador do seu PC**: o túnel entrega a resposta ao RPi. Faça login com
-a conta que tem acesso à pasta e autorize.
-
-Se uma janela de navegador abrir na TV durante o processo, não tem problema — ao terminar,
-`pkill -f chromium` devolve o painel ao normal em até 20 s.
+- **"Use web browser to automatically authenticate?"** → **`n`**
+- Cole o token gerado no PC
+- "Configure this as a Shared Drive (Team Drive)?" → `n`
 
 Teste e agende:
 

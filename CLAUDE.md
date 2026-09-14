@@ -43,7 +43,7 @@ do dono do código. Qualquer proposta que quebre isso precisa de justificativa f
 
 ## 4. Estado atual (setembro/2026)
 
-Fases 1 e 2 implementadas no repositório (ainda **não instaladas no RPi** — ver §6).
+Fases 1 e 2 no ar no RPi desde 2026-09-14.
 
 - `index.html` (esqueleto), `style.css` e `app.js` — passou de 300 linhas com o slideshow e
   foi separado conforme §8. Todo o `CONFIG` vive no topo do `app.js`.
@@ -67,8 +67,9 @@ cortado até alguém medir de novo e fazer commit.
 **Ainda em aberto:**
 - `translateY` em um iframe de ~9400px é caro para o RPi 4. Vale nos dois modos, já que
   encolher o iframe não é opção (§4.2). Não deu problema visível até agora.
-- Instalado no RPi em 2026-09-14, mas ainda em `modo-fixo`: falta confirmar que o
-  `--disable-site-isolation-trials` liberou a leitura. Só então a Fase 1 está entregue.
+- Fase 1 **confirmada com dado da TV** em 2026-09-14:
+  `modo-medido__medida-9399__altura-9399__dashboard-1280`. `medida` igual a `altura`
+  significa leitura real, não fallback.
 
 ### 4.1 Como o RPi sobe o painel hoje (não quebrar isto)
 
@@ -278,15 +279,14 @@ Entregas da Fase 1, em ordem:
    conserto do `Preferences` apontando para o novo `--user-data-dir`, pgrep ajustado.
    O `kiosk.desktop` passa a chamar `~/painel-scroll/scripts/kiosk.sh`.
 3. [x] `README.md` com instalação no RPi passo a passo (clone, autostart, cron das 4h).
-4. [ ] **Validar no RPi** (único passo que fecha o critério de pronto): instalar pelo README,
-   confirmar que a página entra no modo `inner` e que não aparece infobar de flag.
+4. [x] **Validado no RPi** em 2026-09-14: `modo-medido`, sem infobar de flag.
 
 Entregas da Fase 2:
 1. [x] `scripts/sync-images.sh` (rclone sync + geração do manifest) e linha de cron.
 2. [x] Slideshow conforme §5.3, com fallback silencioso.
 3. [x] Seção do README sobre configurar o rclone e a pasta do Drive.
-4. [ ] **rclone autorizado no Drive** (passo manual do usuário, exige um PC com navegador)
-   e validação na TV.
+4. [x] rclone autorizado em 2026-09-14 (`rclone ls gdrive:` respondendo).
+5. [ ] Cron do sync e primeira exibição na TV.
 
 ## 7. Decisões em aberto
 
