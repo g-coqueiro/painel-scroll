@@ -116,7 +116,8 @@ rclone config
 - `n` (novo remote), nome: **gdrive**
 - tipo: **drive**
 - `client_id` e `client_secret`: em branco
-- `scope`: **1** (ou `drive.readonly`, se a conta só precisa ler)
+- `scope`: **2** (`drive.readonly`) — o painel só lê a pasta, nunca escreve nela. Com o
+  escopo 1 (acesso total), um erro de digitação no script poderia apagar arquivos no Drive
 - configuração avançada: **y**, e em `root_folder_id` cole o ID da pasta — é o trecho da
   URL do Drive depois de `/folders/`
 - "Use auto config?": **n**, e cole o token gerado no outro PC
