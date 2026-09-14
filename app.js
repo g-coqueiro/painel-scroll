@@ -65,6 +65,7 @@ const CONFIG = {
     // em ~/http.log no RPi. Assim dá para diagnosticar por SSH, sem alguém
     // precisar ler o selo na TV. A requisição dá 404 de propósito.
     diagPing: true,
+    diagPingDelayMs: 45000,
 
     // Mostra por alguns segundos, no canto da tela, em qual modo a página
     // entrou e qual altura ela está enxergando. Só na primeira carga (a página
@@ -121,20 +122,23 @@ function innerDocument() {
 // O iframe é SEMPRE alto o bastante para caber o dashboard inteiro, e o scroll
 // é sempre translateY. A permissão do kiosk serve só para descobrir o número
 // certo. Encolher o iframe para 100vh e rolar por dentro (como a versão
-// anterior fazia) muda o jeito que o whitebox se desenha — ver §5.2 do CLAUDE.md.
+// anterior fazia) muda o jeito que o whitebox se desenha — ver §4.2 do CLAUDE.md.
+
+// Medida crua, sem rede de segurança. 0 = não deu para ler.
+function alturaMedida() {
+    const doc = innerDocument();
+    if (!doc) return 0;
+    return Math.max(
+        doc.documentElement.scrollHeight,
+        doc.body ? doc.body.scrollHeight : 0
+    );
+}
+
 function alturaConteudo() {
-    if (mode === 'medido') {
-        const doc = innerDocument();
-        if (doc) {
-            const medida = Math.max(
-                doc.documentElement.scrollHeight,
-                doc.body ? doc.body.scrollHeight : 0
-            );
-            // Medida menor que a tela = dashboard ainda desenhando. Aceitar isso
-            // deixaria o painel sem nada para rolar.
-            if (medida > window.innerHeight) return medida;
-        }
-    }
+    // Medida menor que a tela = dashboard ainda desenhando. Aceitar isso
+    // deixaria o painel sem nada para rolar.
+    const medida = alturaMedida();
+    if (medida > window.innerHeight) return medida;
     return CONFIG.fallbackHeightPx;
 }
 
@@ -180,7 +184,7 @@ function textoBadge() {
     const doc = innerDocument();
     if (doc) {
         partes.push('dashboard ' + doc.documentElement.clientWidth +
-                    '×' + Math.round(alturaConteudo()) + ' (medido)');
+                    '×' + Math.round(alturaMedida()) + ' (medido)');
     } else {
         partes.push('altura fixa ' + CONFIG.fallbackHeightPx + ' (sem permissão)');
     }
@@ -188,13 +192,17 @@ function textoBadge() {
     return partes.join(' · ');
 }
 
-function reportarDiagnostico() {
+function reportarDiagnostico(rotulo) {
     if (!CONFIG.diagPing) return;
     const doc = innerDocument();
     const dados = [
+        rotulo,
         'janela-' + window.innerWidth + 'x' + window.innerHeight,
         'zoom-' + (window.devicePixelRatio || 1),
         'modo-' + mode,
+        // medida = o que foi lido no dashboard (0 = nao leu); altura = o que o
+        // painel esta usando. Diferentes significa que caiu no fallback.
+        'medida-' + Math.round(alturaMedida()),
         'altura-' + Math.round(alturaConteudo()),
         'dashboard-' + (doc ? doc.documentElement.clientWidth : 'ilegivel')
     ].join('__');
@@ -243,7 +251,13 @@ frame.addEventListener('load', function () {
 
     lastTick = Date.now();
     mostrarBadge();
-    if (!badgeJaReportado) { badgeJaReportado = true; reportarDiagnostico(); }
+    if (!badgeJaReportado) {
+        badgeJaReportado = true;
+        // Dois retratos: no load os graficos ainda estao desenhando e a medida
+        // sai baixa; o segundo pega o numero ja assentado.
+        reportarDiagnostico('carregou');
+        setTimeout(function () { reportarDiagnostico('assentado'); }, CONFIG.diagPingDelayMs);
+    }
 
     // Durante o slideshow o dashboard recarrega escondido atrás do overlay.
     // Quem retoma o scroll é o fim do slideshow, não este handler.
