@@ -241,8 +241,8 @@ atualização da plataforma, e o dono do código vira gargalo sem o dono do cont
 
 | Fase | Entregável | Critério de pronto |
 |---|---|---|
-| 1 | Altura automática + reload periódico + hospedagem local no RPi | Colega adiciona gráfico → em até 1 ciclo a TV mostra tudo, sem commit |
-| 2 | Slideshow com imagens da pasta compartilhada | Colega solta imagem na pasta → em ≤10 min aparece na TV |
+| 1 | Altura automática + reload periódico + hospedagem local no RPi | **Entregue 2026-09-14**, confirmada com `modo-medido` no log da própria TV |
+| 2 | ~~Slideshow com imagens do Drive~~ → slides HTML (§5.3) | **Entregue 2026-09-14.** Slides exibindo na TV entre os ciclos |
 | 3 | (Adiada) Dashboard próprio | Só se um critério de §5.4 for atendido |
 
 Entregas da Fase 1, em ordem:
@@ -259,8 +259,8 @@ Entregas da Fase 2:
 1. [x] `scripts/sync-images.sh` (rclone sync + geração do manifest) e linha de cron.
 2. [x] Slideshow conforme §5.3, com fallback silencioso.
 3. [x] Seção do README sobre configurar o rclone e a pasta do Drive.
-4. [x] rclone autorizado em 2026-09-14 (`rclone ls gdrive:` respondendo).
-5. [ ] Cron do sync e primeira exibição na TV.
+4. [x] Substituída por slides HTML (§5.3) e **validada na TV em 2026-09-14**: os dois
+   slides exibindo, com as transições corretas.
 
 ## 7. Decisões em aberto
 

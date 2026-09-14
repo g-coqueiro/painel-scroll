@@ -73,10 +73,10 @@ const CONFIG = {
     diagPing: true,
     diagPingDelayMs: 45000,
 
-    // Mostra por alguns segundos, no canto da tela, em qual modo a página
-    // entrou e qual altura ela está enxergando. Só na primeira carga (a página
-    // recarrega 1x/dia), então não polui a TV. 0 desliga.
-    debugBadgeMs: 90000
+    // Selo na tela com o modo e a altura. Desligado: serviu para validar a
+    // instalação e não faz sentido aparecer para quem passa na frente da TV.
+    // Pôr 20000 quando precisar diagnosticar olhando o painel.
+    debugBadgeMs: 0
 };
 
 const frame = document.getElementById('frame');
