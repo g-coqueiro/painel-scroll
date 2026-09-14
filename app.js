@@ -47,6 +47,9 @@ const CONFIG = {
 
     // --- Robustez ---
 
+    // De quanto em quanto tempo reconferir a altura do dashboard.
+    remeasureIntervalMs: 1000,
+
     // Watchdog: se nenhum quadro avançar por esse tempo, recarrega na marra.
     stuckTimeoutMs: 10 * 60 * 1000,
 
@@ -69,13 +72,15 @@ const slideshow = document.getElementById('slideshow');
 const slide = document.getElementById('slide');
 const badge = document.getElementById('badge');
 
-let mode = 'outer';        // 'inner' = same-origin (altura real) | 'outer' = fallback
+let mode = 'fixo';         // 'medido' = altura lida do dashboard | 'fixo' = fallback
 let phase = 'loading';     // loading | pause | scroll | slideshow
 let direction = 1;         // 1 = descendo, -1 = subindo
 let phaseStart = null;     // timestamp do rAF em que a fase começou
 let slideshowAtivo = false;
 let iframeCarregando = false;
 let badgeJaMostrado = false;
+let alturaAplicada = 0;
+let ultimaMedida = 0;
 let lastTick = Date.now();
 let nextAppReload = Date.now() + CONFIG.appReloadMs;
 
@@ -107,35 +112,41 @@ function innerDocument() {
     }
 }
 
+// O iframe é SEMPRE alto o bastante para caber o dashboard inteiro, e o scroll
+// é sempre translateY. A permissão do kiosk serve só para descobrir o número
+// certo. Encolher o iframe para 100vh e rolar por dentro (como a versão
+// anterior fazia) muda o jeito que o whitebox se desenha — ver §5.2 do CLAUDE.md.
 function alturaConteudo() {
-    if (mode === 'inner') {
+    if (mode === 'medido') {
         const doc = innerDocument();
-        if (!doc) return 0;
-        return Math.max(
-            doc.documentElement.scrollHeight,
-            doc.body ? doc.body.scrollHeight : 0
-        );
+        if (doc) {
+            const medida = Math.max(
+                doc.documentElement.scrollHeight,
+                doc.body ? doc.body.scrollHeight : 0
+            );
+            // Medida menor que a tela = dashboard ainda desenhando. Aceitar isso
+            // deixaria o painel sem nada para rolar.
+            if (medida > window.innerHeight) return medida;
+        }
     }
     return CONFIG.fallbackHeightPx;
 }
 
-function alturaVisivel() {
-    if (mode === 'inner') {
-        try { return frame.contentWindow.innerHeight; } catch (e) { /* cai fora */ }
-    }
-    return window.innerHeight;
+// Aplica a altura no elemento, só quando o número muda (escrever em style
+// força reflow, e o dashboard é grande).
+function ajustarAltura() {
+    const altura = alturaConteudo();
+    if (altura === alturaAplicada) return;
+    alturaAplicada = altura;
+    frame.style.height = altura + 'px';
 }
 
 function maxScroll() {
-    return Math.max(0, alturaConteudo() - alturaVisivel());
+    return Math.max(0, alturaConteudo() - window.innerHeight);
 }
 
 function applyScroll(y) {
-    if (mode === 'inner') {
-        frame.contentWindow.scrollTo(0, y);
-    } else {
-        frame.style.transform = 'translateY(' + (-y) + 'px)';
-    }
+    frame.style.transform = 'translateY(' + (-y) + 'px)';
 }
 
 function injectInnerCss(doc) {
@@ -153,9 +164,9 @@ function injectInnerCss(doc) {
 // assim cair no fallback. O único jeito de ver isso na TV é a própria página
 // dizer em que modo entrou, e qual altura está medindo.
 function textoBadge() {
-    return mode === 'inner'
-        ? 'modo inner · altura lida do dashboard: ' + Math.round(alturaConteudo()) + 'px'
-        : 'modo outer (fallback) · altura fixa: ' + CONFIG.fallbackHeightPx + 'px';
+    return mode === 'medido'
+        ? 'altura automática · ' + Math.round(alturaConteudo()) + 'px medidos no dashboard'
+        : 'altura fixa · ' + CONFIG.fallbackHeightPx + 'px (sem permissão para medir)';
 }
 
 function mostrarBadge() {
@@ -190,17 +201,12 @@ function recarregarDashboard() {
 frame.addEventListener('load', function () {
     iframeCarregando = false;
     const doc = innerDocument();
-    mode = doc ? 'inner' : 'outer';
+    mode = doc ? 'medido' : 'fixo';
+    if (doc) injectInnerCss(doc);
 
-    if (mode === 'inner') {
-        frame.style.height = '100vh';
-        frame.style.transform = 'none';
-        injectInnerCss(doc);
-        try { frame.contentWindow.scrollTo(0, 0); } catch (e) { /* ignora */ }
-    } else {
-        frame.style.height = CONFIG.fallbackHeightPx + 'px';
-        frame.style.transform = 'translateY(0px)';
-    }
+    alturaAplicada = 0; // força reaplicar: o conteúdo é outro
+    ajustarAltura();
+    frame.style.transform = 'translateY(0px)';
 
     lastTick = Date.now();
     mostrarBadge();
@@ -358,7 +364,14 @@ function animate(timestamp) {
         return;
     }
 
-    // Altura lida a cada quadro: o dashboard pode crescer durante o ciclo.
+    // O dashboard pode crescer durante o ciclo (gráfico novo, tabela que
+    // termina de carregar). Remedir a cada quadro seria caro; 1x por segundo
+    // basta para um scroll de 250 s.
+    if (timestamp - ultimaMedida >= CONFIG.remeasureIntervalMs) {
+        ultimaMedida = timestamp;
+        ajustarAltura();
+    }
+
     const limite = maxScroll();
     const progress = Math.min(elapsed / CONFIG.scrollDurationMs, 1);
     applyScroll(direction === 1 ? progress * limite : (1 - progress) * limite);
@@ -403,5 +416,8 @@ document.addEventListener('visibilitychange', function () {
     if (!document.hidden) lastTick = Date.now();
 });
 
+// A altura precisa estar aplicada ANTES do dashboard carregar: se ele carregar
+// dentro de um iframe curto, se desenha errado.
+ajustarAltura();
 recarregarDashboard();
 requestAnimationFrame(animate);
