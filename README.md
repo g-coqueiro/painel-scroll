@@ -128,7 +128,7 @@ Se a pasta for de outra pessoa e você preferir não usar o `root_folder_id`, us
 Teste e agende:
 
 ```bash
-rclone lsd gdrive:                     # deve listar a pasta sem pedir login
+rclone ls gdrive:                      # deve listar as imagens sem pedir login
 ~/painel-scroll/scripts/sync-images.sh # primeira sincronização
 cat ~/painel-scroll/images/manifest.json
 ```
@@ -182,7 +182,7 @@ da própria página: `frame.contentDocument` — se vier um documento, está no 
 | Tela em branco | servidor local não subiu | `tail ~/kiosk.log`, checar `python3 -m http.server` |
 | Chromium não relança sozinho | padrão do `pgrep` batendo em outro processo | o padrão precisa ser exclusivo da URL (`painel-scroll-kiosk`) |
 | Gráfico novo não aparece | reload ainda não ocorreu | acontece ao fim de cada ciclo de scroll; `CONFIG.reloadOnCycleEnd` |
-| Slideshow não aparece | manifest vazio ou sync falhando | `tail ~/sync-images.log`, depois `rclone lsd gdrive:` |
+| Slideshow não aparece | manifest vazio ou sync falhando | `tail ~/sync-images.log`, depois `rclone ls gdrive:` |
 | Imagem some da TV mas está no Drive | extensão fora da lista | só `.jpg`, `.jpeg`, `.png` e `.webp` são sincronizados |
 | Sync para de apagar imagens | trava do `--max-delete` disparou | mais de 20 remoções de uma vez; conferir a pasta e rodar o script à mão |
 
