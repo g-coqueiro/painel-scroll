@@ -90,6 +90,7 @@ while true; do
       --overscroll-history-navigation=0 \
       --disable-web-security \
       --user-data-dir="$PROFILE" \
+      --no-first-run \
       "$URL" &
       # Se aparecer a infobar "flag nao suportada" na TV, acrescente --test-type
       # na lista acima (suprime esse aviso especifico).
