@@ -215,7 +215,8 @@ grep __diag ~/http.log | tail -2
 | Slideshow não aparece | manifest vazio ou sync falhando | `tail ~/sync-images.log`, depois `rclone ls gdrive:` |
 | Imagem some da TV mas está no Drive | extensão fora da lista | só `.jpg`, `.jpeg`, `.png` e `.webp` são sincronizados |
 | Sync para de apagar imagens | trava do `--max-delete` disparou | mais de 20 remoções de uma vez; conferir a pasta e rodar o script à mão |
-| `invalid_client` no rclone | token gerado por outra instalação do rclone | refazer a autorização pelo rclone do próprio RPi, com o túnel SSH acima |
+| `invalid_client` no rclone | token gerado por outra instalação do rclone, ou `client_id` compartilhado aposentado | as duas máquinas precisam da mesma versão do rclone; se persistir, criar `client_id` próprio |
+| Slideshow congelou e o dashboard segue normal | sync parou (token/`client_id`) | `tail ~/sync-images.log` — é a falha mais silenciosa do projeto |
 
 ## Desenvolvimento
 

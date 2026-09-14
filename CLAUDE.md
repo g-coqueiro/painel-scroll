@@ -292,6 +292,14 @@ Entregas da Fase 2:
 
 Perguntar ao usuário antes de assumir:
 
+- [ ] **Prazo real: o `client_id` compartilhado do rclone é aposentado "durante 2026".**
+      Configurado em 2026-09-14 usando o compartilhado, para não travar a entrega. Quando
+      cair, o sync para e o slideshow congela **em silêncio** — o dashboard continua
+      rolando, então ninguém percebe. Migrar para `client_id` próprio (Google Cloud
+      Console) antes disso. Armadilha da migração: app em modo "Testing" faz o Google
+      expirar o refresh token a cada 7 dias; é preciso publicar o app.
+      Vigiar com `tail ~/sync-images.log`.
+
 - [ ] A página do whitebox atualiza sozinha (websocket/polling) ou precisa de reload para
       mostrar gráficos novos? Enquanto não souber, assumir que precisa e recarregar o iframe
       ao fim de cada ciclo.
