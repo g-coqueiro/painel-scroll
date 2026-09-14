@@ -87,12 +87,13 @@ while true; do
       --noerrdialogs \
       --disable-infobars \
       --disable-session-crashed-bubble \
-      --disable-features=TranslateUI \
+      --disable-features=TranslateUI,IsolateOrigins,site-per-process \
       --check-for-update-interval=31536000 \
       --autoplay-policy=no-user-gesture-required \
       --disable-pinch \
       --overscroll-history-navigation=0 \
       --disable-web-security \
+      --disable-site-isolation-trials \
       --user-data-dir="$PROFILE" \
       --no-first-run \
       --window-position=0,0 \

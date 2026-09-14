@@ -87,7 +87,30 @@ Cron 04:00 → pkill -f chromium → o loop reabre o navegador limpo.
 - Ao rodar comandos por SSH para testar, é preciso exportar `WAYLAND_DISPLAY=wayland-0` e
   `XDG_RUNTIME_DIR` manualmente, porque fora da sessão eles não existem.
 
+### 4.2 Zoom: o whitebox depende da LARGURA EM PIXELS CSS da janela
+
+Descoberto na marra em 2026-09-14, depois de duas correções erradas minhas.
+
+- A 1920 px CSS de largura, o dashboard se desenha com margens laterais enormes
+  (tarjas nos dois lados, ~50% da tela).
+- A 1280 px CSS (que é o que o zoom de 150% produz numa TV 1920×1080) ele preenche.
+- **O zoom de página fica salvo no perfil do Chromium.** Ao introduzir
+  `--user-data-dir` com um perfil novo, o zoom se perdeu e as tarjas apareceram —
+  parecendo, enganosamente, um efeito das outras mudanças feitas no mesmo dia.
+- O zoom atual (150%) foi reaplicado à mão. **Ele mora só no perfil**: se
+  `~/kiosk-profile` for apagado ou recriado, as tarjas voltam.
+  Para tornar reproduzível, a alternativa é `--force-device-scale-factor=1.5`
+  no kiosk.sh — mas então o zoom manual precisa voltar para 100% (Ctrl+0),
+  senão os dois se multiplicam.
+
+Consequência para a altura: `fallbackHeightPx` foi medido a 1920 px CSS (9399px).
+Com o zoom em 150% a largura efetiva é 1280 e **a altura real é outra**. Enquanto
+o modo `medido` não funcionar, esse número precisa ser remedido na largura efetiva.
+
 **Armadilhas ao alterar essa cadeia:**
+- `git pull` NÃO aplica mudanças no `kiosk.sh`: o loop já está rodando em memória
+  com a versão anterior e só troca no próximo boot. Mudança em `app.js`/`index.html`/
+  `style.css` basta `pull` + `pkill -f chromium`; mudança no `kiosk.sh` exige reboot.
 - O `pgrep -f "painel-scroll"` só funciona porque a URL do GitHub Pages contém essa string.
   Ao migrar para localhost o padrão **precisa ser exclusivo da URL**: com o repo em
   `~/painel-scroll`, tanto o `http.server --directory ~/painel-scroll` quanto o próprio
@@ -133,6 +156,16 @@ sozinhas. Manter as demais flags que já existem hoje no script.)
 Notas sobre o flag no Chromium 149:
 - `--disable-web-security` só tem efeito com `--user-data-dir` diferente do padrão. Usar um
   diretório persistente (não `/tmp`) para o conserto do `Preferences` valer entre reboots.
+- **Sozinho ele não basta.** O isolamento de sites coloca o iframe de outro domínio em outro
+  processo, e aí o acesso ao DOM continua bloqueado — confirmado na TV em 2026-09-14
+  (`modo-fixo` / `dashboard-ilegivel` com a flag ativa na linha de comando). É preciso
+  `--disable-site-isolation-trials` e `--disable-features=IsolateOrigins,site-per-process`.
+- Cuidado: passar `--disable-features` duas vezes faz a última vencer e a primeira ser
+  ignorada em silêncio. Tudo tem que ir numa lista só, junto com `TranslateUI`.
+- **Encolher o iframe para 100vh e rolar por dentro não funciona** com este dashboard: ele
+  se redesenha conforme a largura/altura do viewport (ver §4.2). O iframe tem que continuar
+  alto o bastante para o conteúdo inteiro, com scroll por `translateY`. A permissão serve
+  só para MEDIR a altura, não para rolar.
 - Chromium mostra uma infobar de "flag não suportada"; em `--kiosk` ela normalmente não aparece.
   Validar na TV. Se aparecer, tentar `--test-type` (suprime essa infobar específica).
 - O `pkill -f chromium` do cron das 4h continua funcionando sem alteração.
@@ -297,3 +330,8 @@ Perguntar ao usuário antes de assumir:
 | 2026-09-14 | Reload do dashboard acontece **atrás** do overlay do slideshow, não antes | Ordem do §5.3 invertida de propósito: recarregar antes deixava o iframe piscando em branco à vista enquanto o manifest não respondia |
 | 2026-09-14 | Manifest regenerado sempre a partir do disco, mesmo se o rclone falhar | Evita manifest apontando para arquivo que não existe |
 | 2026-09-14 | `rclone sync` com `--max-delete 20` | Um erro de permissão que faça o remote responder vazio apagaria todas as imagens da TV de uma vez |
+| 2026-09-14 | Escopo somente-leitura no rclone | O painel só lê a pasta; escopo total permitiria apagar o Drive do dono do conteúdo por engano |
+| 2026-09-14 | Iframe volta a ser alto + `translateY`; permissão só para medir | Encolher para 100vh desfigurou o dashboard na TV (§4.2) |
+| 2026-09-14 | Documentado que o layout do whitebox depende da largura em px CSS (§4.2) | Causa real das tarjas laterais; custou duas correções erradas antes de aparecer |
+| 2026-09-14 | Painel registra diagnóstico em `~/http.log` via `/__diag/...` | Ler o selo na TV é ambíguo — a primeira leitura veio de outro navegador e quase gerou um terceiro palpite errado |
+| 2026-09-14 | Isolamento de sites desligado junto com `--disable-web-security` | Só a segunda flag dá acesso real ao DOM do iframe; confirmado com dado da TV |
