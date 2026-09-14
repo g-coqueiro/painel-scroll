@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto Scroll Site</title>
+    <title>Painel Scroll</title>
 
     <style>
         html,
@@ -16,125 +16,219 @@
             background-color: #EDF1F6;
         }
 
-        iframe {
+        #frame {
             width: 100%;
             border: 0;
             display: block;
-
-            /*
-               Altura total do conteúdo do site embarcado em pixels.
-               Abra o site no navegador, pressione F12 → Console e rode:
-               document.documentElement.scrollHeight
-               Cole o valor aqui (ex: 4200px).
-            */
-            height: 7692px;
+            /* Altura definida pelo JS: 100vh no modo same-origin,
+               altura fixa de fallback no modo cross-origin. */
+            height: 100vh;
         }
     </style>
-
 </head>
 
 <body>
 
-    <!-- Aqui você define qual site quer manter na tela -->
-    <iframe id="frame" src="https://whitebox.isso.digital/UwiGFDAXcl5v/"></iframe>
+    <iframe id="frame" title="Dashboard de eficiência energética"></iframe>
 
     <script>
-        const IFRAME_HEIGHT_PX = 7692; // <- mesmo valor do height no CSS
-        const SCROLL_DURATION_MS = 250000; // 70 segundos por sentido
-        const PAINEL_REFRESH_MS = 30 * 60 * 1000; // recarrega o painel a cada 30 minutos
-        const TOLERANCIA_MS = 10 * 60 * 1000; // se o ciclo travar, recarrega na marra
-        const APP_RELOAD_MS = 24 * 60 * 60 * 1000; // 1x/dia recarrega a própria página
-        const CACHE_BUSTER = true; // adiciona ?_=timestamp para evitar conteúdo em cache
+        'use strict';
+
+        // Todo parâmetro ajustável vive aqui. Nada de valor solto no meio da lógica.
+        const CONFIG = {
+            // Dashboard espelhado.
+            dashboardUrl: 'https://whitebox.isso.digital/UwiGFDAXcl5v/',
+
+            // Duração de cada sentido do scroll (descida e subida).
+            scrollDurationMs: 250000,
+
+            // Pausa no topo e no fim, para o conteúdo ficar legível na virada.
+            pauseMs: 3000,
+
+            // Recarrega o iframe ao fim de cada ciclo completo (desce + sobe),
+            // único momento em que a recarga não corta a animação.
+            reloadOnCycleEnd: true,
+
+            // Acrescenta ?_=timestamp na URL do dashboard para furar cache.
+            cacheBuster: true,
+
+            // Usado SÓ no modo de fallback (cross-origin), quando não dá para ler a
+            // altura real do documento. Medir com document.documentElement.scrollHeight
+            // no console do dashboard, EM 1920x1080 (o layout é responsivo: medir em
+            // outra largura dá outro valor). Última medição: 9399px em 2026-09-14.
+            fallbackHeightPx: 9399,
+
+            // CSS injetado dentro do dashboard (só funciona no modo same-origin).
+            // Ex.: 'header { display: none !important; }'
+            innerCss: '',
+
+            // Watchdog: se nenhum quadro avançar por esse tempo, recarrega na marra.
+            stuckTimeoutMs: 10 * 60 * 1000,
+
+            // Recarrega a própria página 1x/dia, e só se ela estiver acessível.
+            appReloadMs: 24 * 60 * 60 * 1000,
+
+            // Intervalo do watchdog (setInterval sobrevive ao rAF congelado).
+            watchdogIntervalMs: 30000
+        };
 
         const frame = document.getElementById('frame');
-        const PAINEL_URL = frame.src;
 
-        let startTime = null;
-        let direction = 1; // 1 = descendo, -1 = subindo
-        let currentY = 0;
+        let mode = 'outer';      // 'inner' = same-origin (altura real) | 'outer' = fallback
+        let phase = 'loading';   // loading | pause | scroll
+        let direction = 1;       // 1 = descendo, -1 = subindo
+        let phaseStart = null;   // timestamp do rAF em que a fase começou
+        let lastTick = Date.now();
+        let nextAppReload = Date.now() + CONFIG.appReloadMs;
 
-        // Usa relógio real (não setTimeout), pois timers longos são pausados
-        // ou atrasados quando a máquina suspende ou a aba fica em segundo plano.
-        let proximoRefresh = Date.now() + PAINEL_REFRESH_MS;
-        let proximoReloadApp = Date.now() + APP_RELOAD_MS;
-
-        // Recarrega SÓ o iframe, nunca a página. Assim o documento continua vivo
-        // na memória do navegador: se a rede cair, o painel fica vazio por um
-        // ciclo e se recupera sozinho, em vez de travar na tela de erro.
-        function recarregarPainel() {
-            frame.src = CACHE_BUSTER
-                ? PAINEL_URL + (PAINEL_URL.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now()
-                : PAINEL_URL;
-
-            // Volta a animação para o topo junto com o conteúdo novo
-            startTime = null;
-            direction = 1;
-            currentY = 0;
-            frame.style.transform = 'translateY(0px)';
-
-            proximoRefresh = Date.now() + PAINEL_REFRESH_MS;
+        function dashboardSrc() {
+            const url = CONFIG.dashboardUrl;
+            if (!CONFIG.cacheBuster) return url;
+            return url + (url.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
         }
 
-        // Reload da própria página só depois de confirmar que ela está acessível.
-        // Sem essa checagem, um reload durante queda de rede deixaria a TV parada
-        // na tela de erro do navegador até alguém ir lá mexer.
-        function reloadAppSeGuro() {
-            if (navigator.onLine === false) return;
-
-            fetch(location.href, { cache: 'no-store' })
-                .then(function (r) { if (r.ok) location.reload(); })
-                .catch(function () { /* rede fora: tenta de novo no próximo tick */ });
-        }
-
-        // Watchdog: se o rAF travar (tela apagada, aba oculta, GPU dormindo), o
-        // refresh elegante no topo do ciclo nunca aconteceria. setInterval também
-        // é estrangulado em segundo plano, mas continua disparando de tempos em tempos.
-        setInterval(function () {
-            if (Date.now() >= proximoRefresh + TOLERANCIA_MS) recarregarPainel();
-
-            if (Date.now() >= proximoReloadApp) {
-                proximoReloadApp = Date.now() + APP_RELOAD_MS; // evita tentar a cada 30s
-                reloadAppSeGuro();
+        // Verifica se a same-origin policy está desativada (flag do kiosk). Sem a
+        // flag, contentDocument vem null ou lança SecurityError: caímos no modo de
+        // altura fixa e o painel continua funcionando.
+        function innerDocument() {
+            try {
+                const doc = frame.contentDocument;
+                if (!doc || !doc.documentElement) return null;
+                if (doc.location && doc.location.href === 'about:blank') return null;
+                return doc;
+            } catch (e) {
+                return null;
             }
-        }, 30000);
+        }
 
-        // Se a aba voltar a ficar visível depois de muito tempo oculta,
-        // atualiza na hora para não exibir dado velho.
-        document.addEventListener('visibilitychange', function () {
-            if (!document.hidden && Date.now() >= proximoRefresh) recarregarPainel();
+        function maxScroll() {
+            if (mode === 'inner') {
+                const doc = innerDocument();
+                if (!doc) return 0;
+                const altura = Math.max(
+                    doc.documentElement.scrollHeight,
+                    doc.body ? doc.body.scrollHeight : 0
+                );
+                return Math.max(0, altura - frame.contentWindow.innerHeight);
+            }
+            return Math.max(0, CONFIG.fallbackHeightPx - window.innerHeight);
+        }
+
+        function applyScroll(y) {
+            if (mode === 'inner') {
+                frame.contentWindow.scrollTo(0, y);
+            } else {
+                frame.style.transform = 'translateY(' + (-y) + 'px)';
+            }
+        }
+
+        function injectInnerCss(doc) {
+            if (!CONFIG.innerCss) return;
+            try {
+                const style = doc.createElement('style');
+                style.textContent = CONFIG.innerCss;
+                doc.head.appendChild(style);
+            } catch (e) {
+                /* dashboard ainda protegido: segue sem o CSS */
+            }
+        }
+
+        function recarregarDashboard() {
+            phase = 'loading';
+            lastTick = Date.now();
+            frame.src = dashboardSrc();
+        }
+
+        // Cada carga do iframe redefine o modo: se a flag do Chromium sumir numa
+        // atualização, o painel se ajusta sozinho no ciclo seguinte.
+        frame.addEventListener('load', function () {
+            const doc = innerDocument();
+            mode = doc ? 'inner' : 'outer';
+
+            if (mode === 'inner') {
+                frame.style.height = '100vh';
+                frame.style.transform = 'none';
+                injectInnerCss(doc);
+                try { frame.contentWindow.scrollTo(0, 0); } catch (e) { /* ignora */ }
+            } else {
+                frame.style.height = CONFIG.fallbackHeightPx + 'px';
+                frame.style.transform = 'translateY(0px)';
+            }
+
+            direction = 1;
+            phase = 'pause';
+            phaseStart = null;
+            lastTick = Date.now();
         });
 
         function animate(timestamp) {
-            if (startTime === null) startTime = timestamp;
+            requestAnimationFrame(animate);
 
-            // Calcula o scroll máximo em tempo real (adapta a qualquer tela)
-            const maxScroll = IFRAME_HEIGHT_PX - window.innerHeight;
+            if (phase === 'loading') return;
+            if (phaseStart === null) phaseStart = timestamp;
 
-            const elapsed = timestamp - startTime;
-            const progress = Math.min(elapsed / SCROLL_DURATION_MS, 1);
+            lastTick = Date.now();
+            const elapsed = timestamp - phaseStart;
+
+            if (phase === 'pause') {
+                if (elapsed >= CONFIG.pauseMs) {
+                    phase = 'scroll';
+                    phaseStart = timestamp;
+                }
+                return;
+            }
+
+            // Altura lida a cada quadro: o dashboard pode crescer durante o ciclo.
+            const limite = maxScroll();
+            const progress = Math.min(elapsed / CONFIG.scrollDurationMs, 1);
+            applyScroll(direction === 1 ? progress * limite : (1 - progress) * limite);
+
+            if (progress < 1) return;
 
             if (direction === 1) {
-                currentY = -progress * maxScroll;
+                direction = -1;
+                phase = 'pause';
+                phaseStart = timestamp;
+                return;
+            }
+
+            // Ciclo completo: recarrega para pegar gráficos novos.
+            if (CONFIG.reloadOnCycleEnd) {
+                recarregarDashboard();
             } else {
-                currentY = -(1 - progress) * maxScroll;
+                direction = 1;
+                phase = 'pause';
+                phaseStart = timestamp;
             }
-
-            frame.style.transform = `translateY(${currentY}px)`;
-
-            if (progress >= 1) {
-                direction *= -1;
-                startTime = null;
-
-                // Voltou ao topo e o prazo já expirou -> troca o conteúdo agora,
-                // que é o único momento em que a recarga não corta a animação.
-                if (direction === 1 && Date.now() >= proximoRefresh) {
-                    recarregarPainel();
-                }
-            }
-
-            requestAnimationFrame(animate);
         }
 
+        // Reload da própria página só depois de confirmar que ela responde. Sem essa
+        // checagem, um reload durante queda de rede deixaria a TV parada na tela de
+        // erro do navegador até alguém ir até lá.
+        function reloadAppSeGuro() {
+            if (navigator.onLine === false) return;
+            fetch(location.href, { cache: 'no-store' })
+                .then(function (r) { if (r.ok) location.reload(); })
+                .catch(function () { /* rede fora: tenta no próximo tick */ });
+        }
+
+        // Watchdog: o rAF congela com a tela apagada ou a aba oculta, e o iframe pode
+        // nunca disparar 'load' se a rede cair no meio da carga. setInterval também é
+        // estrangulado em segundo plano, mas continua disparando de tempos em tempos.
+        setInterval(function () {
+            if (Date.now() - lastTick >= CONFIG.stuckTimeoutMs) recarregarDashboard();
+
+            if (Date.now() >= nextAppReload) {
+                nextAppReload = Date.now() + CONFIG.appReloadMs;
+                reloadAppSeGuro();
+            }
+        }, CONFIG.watchdogIntervalMs);
+
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) lastTick = Date.now();
+        });
+
+        recarregarDashboard();
         requestAnimationFrame(animate);
     </script>
 
