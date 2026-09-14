@@ -61,6 +61,11 @@ const CONFIG = {
 
     // --- Diagnóstico ---
 
+    // Manda os mesmos números do selo para o servidor local, que os registra
+    // em ~/http.log no RPi. Assim dá para diagnosticar por SSH, sem alguém
+    // precisar ler o selo na TV. A requisição dá 404 de propósito.
+    diagPing: true,
+
     // Mostra por alguns segundos, no canto da tela, em qual modo a página
     // entrou e qual altura ela está enxergando. Só na primeira carga (a página
     // recarrega 1x/dia), então não polui a TV. 0 desliga.
@@ -79,6 +84,7 @@ let phaseStart = null;     // timestamp do rAF em que a fase começou
 let slideshowAtivo = false;
 let iframeCarregando = false;
 let badgeJaMostrado = false;
+let badgeJaReportado = false;
 let alturaAplicada = 0;
 let ultimaMedida = 0;
 let lastTick = Date.now();
@@ -182,6 +188,20 @@ function textoBadge() {
     return partes.join(' · ');
 }
 
+function reportarDiagnostico() {
+    if (!CONFIG.diagPing) return;
+    const doc = innerDocument();
+    const dados = [
+        'janela-' + window.innerWidth + 'x' + window.innerHeight,
+        'zoom-' + (window.devicePixelRatio || 1),
+        'modo-' + mode,
+        'altura-' + Math.round(alturaConteudo()),
+        'dashboard-' + (doc ? doc.documentElement.clientWidth : 'ilegivel')
+    ].join('__');
+
+    fetch('/__diag/' + dados, { cache: 'no-store' }).catch(function () { /* ignora */ });
+}
+
 function mostrarBadge() {
     if (!CONFIG.debugBadgeMs || badgeJaMostrado) return;
     badgeJaMostrado = true;
@@ -223,6 +243,7 @@ frame.addEventListener('load', function () {
 
     lastTick = Date.now();
     mostrarBadge();
+    if (!badgeJaReportado) { badgeJaReportado = true; reportarDiagnostico(); }
 
     // Durante o slideshow o dashboard recarrega escondido atrás do overlay.
     // Quem retoma o scroll é o fim do slideshow, não este handler.

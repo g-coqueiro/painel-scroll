@@ -11,6 +11,7 @@ REPO="$HOME/painel-scroll"
 PORT=8080
 PROFILE="$HOME/kiosk-profile"
 LOG="$HOME/kiosk.log"
+HTTPLOG="$HOME/http.log"
 
 # Tag exclusiva da URL. E o que o pgrep procura para saber se o Chromium esta
 # vivo. NAO usar "painel-scroll" aqui: essa string tambem aparece na linha de
@@ -47,8 +48,11 @@ fi
 # 3. Servidor estatico local. Servir por http:// (e nao file://) e o que permite
 #    ler o manifest das imagens sem CORS e funcionar sem internet.
 if ! pgrep -f "http.server $PORT" >/dev/null; then
+  # O log do http.server e o canal de diagnostico: a pagina pede uma URL
+  # /__diag/... com os numeros dela, que aparece aqui. Ver reportarDiagnostico().
+  [ -f "$HTTPLOG" ] && [ "$(stat -c%s "$HTTPLOG")" -gt 1048576 ] && : > "$HTTPLOG"
   python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$REPO" \
-    >/dev/null 2>&1 &
+    >>"$HTTPLOG" 2>&1 &
   log "http.server iniciado na porta $PORT"
 fi
 
