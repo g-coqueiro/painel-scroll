@@ -23,15 +23,15 @@ O ciclo do painel:
 
 ```
 1. Scroll do dashboard: desce → sobe
-2. Lê images/manifest.json
-   ├─ vazio ou inacessível → recarrega o dashboard e volta ao passo 1
-   └─ com imagens → slideshow em tela cheia (o dashboard recarrega escondido atrás dele)
+2. Slides de CONFIG.slides
+   ├─ lista vazia ou nenhum carrega → recarrega o dashboard e volta ao passo 1
+   └─ com slides → cada um em tela cheia (o dashboard recarrega escondido atrás deles)
 3. Volta ao passo 1, já com o dashboard atualizado
 ```
 
 Os arquivos: `index.html` (esqueleto), `style.css`, `app.js` (toda a lógica, com o `CONFIG`
 no topo), `scripts/kiosk.sh` (boot), `scripts/serve.py` (servidor local) e
-`scripts/sync-images.sh` (imagens do Drive).
+e os slides em `slides/`.
 
 O iframe é **sempre** alto o bastante para o dashboard inteiro, e o scroll é **sempre**
 `translateY`. O que muda entre os dois modos é só de onde vem o número da altura:
@@ -91,74 +91,32 @@ Acrescente:
 
 O loop do `kiosk.sh` reabre o Chromium em até 20 s, com o perfil limpo.
 
-**5. Imagens do slideshow (rclone + Google Drive)**
+**5. Slides**
 
-O painel exibe as imagens de uma pasta compartilhada do Drive entre um ciclo de scroll e
-outro. Quem tem acesso à pasta sobe imagem lá; em até 10 min ela aparece na TV.
+Entre um ciclo de scroll e outro o painel exibe páginas HTML da pasta `slides/`, na ordem
+e pelo tempo definidos em `CONFIG.slides`, no topo do `app.js`:
 
-> O ID da pasta **não fica no repositório** — ele é um link de acesso e o repo é público.
-> Ele vive só no `~/.config/rclone/rclone.conf` do RPi, que não é versionado.
-
-> **As duas máquinas precisam da MESMA versão do rclone.** O token é emitido para uma
-> identidade de aplicativo, e a versão do `apt` do Debian não bate com a oficial —
-> resultado: `invalid_client: The provided client secret is invalid`.
-
-No RPi, instale a versão oficial (a do `apt` é antiga demais):
-
-```bash
-cd /tmp && curl -O https://downloads.rclone.org/rclone-current-linux-arm64.zip && unzip -o rclone-current-linux-arm64.zip
+```js
+slides: [
+    { src: 'slides/kaizen-spda-g09-g10.html', durationMs: 45000 },
+    { src: 'slides/kaizen-portoes-g09-g11.html', durationMs: 45000 }
+],
 ```
 
-```bash
-sudo cp /tmp/rclone-*-linux-arm64/rclone /usr/local/bin/ && sudo chmod 755 /usr/local/bin/rclone && hash -r && rclone version | head -1
-```
+Para acrescentar um slide: colocar o arquivo em `slides/`, acrescentar a linha no `CONFIG`,
+commitar. No RPi, `git pull && pkill -f chromium`.
 
-No PC (com navegador), instale a mesma versão — `winget install Rclone.Rclone` no Windows —
-confirme com `rclone version` e gere o token:
+Regras dos slides:
 
-```bash
-rclone authorize "drive" --drive-scope=drive.readonly
-```
-
-Se aparecer o aviso de que o `client_id` compartilhado está sendo aposentado, responda **`y`**
-(veja o prazo em CLAUDE.md §7). O navegador abre; autorize e copie o bloco
-`{"access_token":...}` inteiro.
-
-De volta ao RPi:
-
-```bash
-rclone config
-```
-
-- `n` (novo remote), nome: **gdrive**
-- tipo: **drive**
-- "Continue using the shared client_id anyway?" → **`y`** (o padrão é não)
-- `scope`: **2** (`drive.readonly`) — o painel só lê a pasta, nunca escreve nela
-- configuração avançada: **y**, e em `root_folder_id` cole o ID da pasta — é o trecho da
-  URL do Drive depois de `/folders/`. O resto: Enter até o fim
-- **"Use web browser to automatically authenticate?"** → **`n`**
-- Cole o token gerado no PC
-- "Configure this as a Shared Drive (Team Drive)?" → `n`
-
-Teste e agende:
-
-```bash
-rclone ls gdrive:                      # deve listar as imagens sem pedir login
-~/painel-scroll/scripts/sync-images.sh # primeira sincronização
-cat ~/painel-scroll/images/manifest.json
-```
-
-```bash
-crontab -e
-```
-
-```
-*/5 * * * * /home/gcoqueiro/painel-scroll/scripts/sync-images.sh
-```
-
-A pasta `images/` está no `.gitignore`: as imagens vivem só no RPi e nunca vão para o
-GitHub. A ordem de exibição é alfabética pelo nome do arquivo — o dono do conteúdo
-controla a sequência com prefixo (`01_`, `02_`, ...).
+- **Desenhe em 1920×1080 com layout fixo** (`body { width: 1920px; height: 1080px }`).
+  O painel mantém o iframe nessa resolução e o encolhe por `transform` para caber na
+  janela — necessário porque o kiosk roda com zoom (§4.2 do CLAUDE.md), e sem isso o
+  slide apareceria cortado. Outra resolução funciona, desde que `slideBaseWidth` e
+  `slideBaseHeight` sejam ajustados junto.
+- **Autocontido**: imagens e fontes embutidas como `data:` URI, sem requisição externa.
+  Assim o slide funciona com a internet fora.
+- Slide que não existe ou não carrega em `slideTimeoutMs` é pulado em silêncio.
+- Lista vazia = sem slides; o painel só rola o dashboard.
 
 **6. Reiniciar**
 
@@ -173,11 +131,10 @@ nova cadeia — o `kiosk.desktop` deste repositório já aponta para `~/painel-s
 
 ```bash
 tail -f ~/kiosk.log                  # o que o kiosk.sh fez no boot e nos relançamentos
-tail -f ~/sync-images.log            # última sincronização do Drive
 pgrep -af painel-scroll-kiosk        # o Chromium está vivo?
 curl -sI http://localhost:8080/      # o servidor local está de pé?
 pgrep -af serve.py                   # quem está servindo a página
-curl -s http://localhost:8080/images/manifest.json   # o que o painel vai exibir
+curl -sI http://localhost:8080/slides/  # os slides estão sendo servidos?
 ```
 
 Para rodar algum comando gráfico por SSH (fora da sessão do desktop), exporte antes:
@@ -213,11 +170,9 @@ grep __diag ~/http.log | tail -2
 | Tela em branco | servidor local não subiu | `tail ~/kiosk.log`, checar `pgrep -af serve.py` |
 | Chromium não relança sozinho | padrão do `pgrep` batendo em outro processo | o padrão precisa ser exclusivo da URL (`painel-scroll-kiosk`) |
 | Gráfico novo não aparece | reload ainda não ocorreu | acontece ao fim de cada ciclo de scroll; `CONFIG.reloadOnCycleEnd` |
-| Slideshow não aparece | manifest vazio ou sync falhando | `tail ~/sync-images.log`, depois `rclone ls gdrive:` |
-| Imagem some da TV mas está no Drive | extensão fora da lista | só `.jpg`, `.jpeg`, `.png` e `.webp` são sincronizados |
-| Sync para de apagar imagens | trava do `--max-delete` disparou | mais de 20 remoções de uma vez; conferir a pasta e rodar o script à mão |
-| `invalid_client` no rclone | token gerado por outra instalação do rclone, ou `client_id` compartilhado aposentado | as duas máquinas precisam da mesma versão do rclone; se persistir, criar `client_id` próprio |
-| Slideshow congelou e o dashboard segue normal | sync parou (token/`client_id`) | `tail ~/sync-images.log` — é a falha mais silenciosa do projeto |
+| Slide não aparece | arquivo ausente ou caminho errado no `CONFIG` | `curl -sI http://localhost:8080/slides/<arquivo>` — tem que dar 200 |
+| Slide aparece cortado | layout não é do tamanho de `slideBaseWidth`×`slideBaseHeight` | ajustar o HTML para 1920×1080, ou o `CONFIG` para a resolução usada |
+| Slide sem imagens/fontes | recursos externos em vez de `data:` URI | embutir tudo no HTML |
 
 ## Desenvolvimento
 

@@ -29,21 +29,27 @@ const CONFIG = {
     // Ex.: 'header { display: none !important; }'
     innerCss: '',
 
-    // --- Slideshow ---
+    // --- Slides ---
 
-    slideshowEnabled: true,
+    // Páginas HTML exibidas entre um ciclo de scroll e outro, nesta ordem.
+    // Lista vazia = sem slides; o painel só rola o dashboard.
+    slides: [
+        { src: 'slides/kaizen-spda-g09-g10.html', durationMs: 45000 },
+        { src: 'slides/kaizen-portoes-g09-g11.html', durationMs: 45000 }
+    ],
 
-    // Gerado pelo scripts/sync-images.sh no próprio RPi.
-    manifestUrl: 'images/manifest.json',
-    imagesBaseUrl: 'images/',
+    slideDefaultDurationMs: 45000,
 
-    imageDurationMs: 10000,
-    imageFadeMs: 600,
+    // Resolução em que os slides são desenhados. Eles são escalados para caber
+    // na janela: com o zoom de 150% do kiosk (§4.2 do CLAUDE.md) o viewport é
+    // 1280x720, e sem a escala um slide de 1920px apareceria cortado.
+    slideBaseWidth: 1920,
+    slideBaseHeight: 1080,
 
-    // Sem esses limites, um manifest ou uma imagem que nunca respondem
-    // deixariam a TV parada no slideshow para sempre.
-    manifestTimeoutMs: 5000,
-    imageTimeoutMs: 15000,
+    fadeMs: 600,
+
+    // Slide que não carrega nesse tempo é pulado, para não prender a TV.
+    slideTimeoutMs: 15000,
 
     // --- Robustez ---
 
@@ -91,7 +97,7 @@ let ultimaMedida = 0;
 let lastTick = Date.now();
 let nextAppReload = Date.now() + CONFIG.appReloadMs;
 
-document.documentElement.style.setProperty('--fade-ms', CONFIG.imageFadeMs + 'ms');
+document.documentElement.style.setProperty('--fade-ms', CONFIG.fadeMs + 'ms');
 
 function esperar(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -226,7 +232,7 @@ function mostrarBadge() {
     setTimeout(function () {
         clearInterval(atualiza);
         badge.classList.remove('visivel');
-        setTimeout(function () { badge.hidden = true; }, CONFIG.imageFadeMs);
+        setTimeout(function () { badge.hidden = true; }, CONFIG.fadeMs);
     }, CONFIG.debugBadgeMs);
 }
 
@@ -259,8 +265,8 @@ frame.addEventListener('load', function () {
         setTimeout(function () { reportarDiagnostico('assentado'); }, CONFIG.diagPingDelayMs);
     }
 
-    // Durante o slideshow o dashboard recarrega escondido atrás do overlay.
-    // Quem retoma o scroll é o fim do slideshow, não este handler.
+    // Durante os slides o dashboard recarrega escondido atrás do overlay.
+    // Quem retoma o scroll é o fim da sequência, não este handler.
     if (slideshowAtivo) return;
 
     direction = 1;
@@ -268,89 +274,92 @@ frame.addEventListener('load', function () {
     phaseStart = null;
 });
 
-// ---------------------------------------------------------------- slideshow
+// ------------------------------------------------------------------ slides
 
-// Lê o manifest gerado pelo sync. Qualquer falha devolve lista vazia: o painel
-// pula o slideshow em silêncio e volta para o dashboard.
-async function carregarManifest() {
-    if (!CONFIG.slideshowEnabled) return [];
-
-    const abort = new AbortController();
-    const timer = setTimeout(function () { abort.abort(); }, CONFIG.manifestTimeoutMs);
-
+// O iframe dispara 'load' tambem para uma pagina de erro, entao um slide que
+// nao existe apareceria como o 404 do servidor na TV. Conferir antes.
+async function slideExiste(src) {
     try {
-        const resposta = await fetch(CONFIG.manifestUrl, {
-            cache: 'no-store',
-            signal: abort.signal
-        });
-        if (!resposta.ok) return [];
-
-        const dados = await resposta.json();
-        const lista = Array.isArray(dados) ? dados : (dados && dados.images) || [];
-
-        return lista
-            .map(function (item) {
-                return typeof item === 'string' ? item : (item && item.name);
-            })
-            .filter(function (nome) {
-                return typeof nome === 'string' && nome.length > 0;
-            });
+        const resposta = await fetch(src, { method: 'HEAD', cache: 'no-store' });
+        return resposta.ok;
     } catch (e) {
-        return [];
-    } finally {
-        clearTimeout(timer);
+        return false;
     }
 }
 
-// Baixa a imagem antes de exibir: sem isso, a troca mostraria um quadro em
-// branco enquanto o arquivo carrega. Devolve false se a imagem não veio.
-function preCarregar(url) {
+// Carrega com o slide ainda invisível: a troca entre um e outro não pode
+// mostrar quadro em branco. Devolve false se demorar demais.
+function carregarSlide(src) {
     return new Promise(function (resolve) {
-        const img = new Image();
-        const timer = setTimeout(function () { resolve(false); }, CONFIG.imageTimeoutMs);
+        let respondido = false;
 
-        img.onload = function () { clearTimeout(timer); resolve(true); };
-        img.onerror = function () { clearTimeout(timer); resolve(false); };
-        img.src = url;
+        function terminar(ok) {
+            if (respondido) return;
+            respondido = true;
+            clearTimeout(timer);
+            slide.removeEventListener('load', aoCarregar);
+            resolve(ok);
+        }
+
+        function aoCarregar() { terminar(true); }
+
+        const timer = setTimeout(function () { terminar(false); }, CONFIG.slideTimeoutMs);
+        slide.addEventListener('load', aoCarregar);
+        slide.src = src;
     });
 }
 
-async function rodarSlideshow() {
-    // O manifest é lido com o dashboard ainda parado no topo. Recarregar antes
-    // disso deixaria o iframe piscando em branco na frente de todo mundo
-    // enquanto o fetch não responde (até manifestTimeoutMs).
-    const imagens = await carregarManifest();
+// Os slides têm layout fixo em slideBaseWidth x slideBaseHeight. O iframe é
+// mantido nesse tamanho (para o layout de dentro ficar correto) e encolhido
+// visualmente por transform, o que funciona em qualquer zoom ou resolução.
+function ajustarEscalaSlide() {
+    const escala = Math.min(
+        window.innerWidth / CONFIG.slideBaseWidth,
+        window.innerHeight / CONFIG.slideBaseHeight
+    );
+    slide.style.width = CONFIG.slideBaseWidth + 'px';
+    slide.style.height = CONFIG.slideBaseHeight + 'px';
+    slide.style.transform = 'scale(' + escala + ')';
+}
 
-    if (!imagens.length) {
+async function rodarSlides() {
+    const lista = (CONFIG.slides || []).filter(function (s) { return s && s.src; });
+    let overlayAberto = false;
+
+    for (const item of lista) {
+        if (!await slideExiste(item.src)) continue;
+        if (!await carregarSlide(item.src)) continue;
+
+        if (!overlayAberto) {
+            overlayAberto = true;
+            ajustarEscalaSlide();
+            slideshow.classList.add('visivel');
+            slideshow.setAttribute('aria-hidden', 'false');
+            await esperar(CONFIG.fadeMs);
+
+            // Só agora, com a tela coberta, o dashboard recarrega: quando os
+            // slides terminarem ele já estará pronto, sem iframe em branco.
+            if (CONFIG.reloadOnCycleEnd) recarregarDashboard();
+        }
+
+        slide.classList.add('visivel');
+        await esperar(item.durationMs || CONFIG.slideDefaultDurationMs);
+        slide.classList.remove('visivel');
+        await esperar(CONFIG.fadeMs);
+
+        // A sequência pode durar mais que o watchdog se houver muitos slides.
+        lastTick = Date.now();
+    }
+
+    // Nenhum slide carregou: o dashboard ainda não foi recarregado.
+    if (!overlayAberto) {
         if (CONFIG.reloadOnCycleEnd) recarregarDashboard();
         return;
     }
 
-    slideshow.classList.add('visivel');
-    slideshow.setAttribute('aria-hidden', 'false');
-    await esperar(CONFIG.imageFadeMs);
-
-    // Só agora, com o overlay cobrindo a tela, o dashboard recarrega: quando o
-    // slideshow terminar ele já estará pronto, sem iframe em branco à vista.
-    if (CONFIG.reloadOnCycleEnd) recarregarDashboard();
-
-    for (const nome of imagens) {
-        const url = CONFIG.imagesBaseUrl + encodeURIComponent(nome);
-        if (!await preCarregar(url)) continue;
-
-        slide.src = url;
-        slide.classList.add('visivel');
-        await esperar(CONFIG.imageDurationMs);
-        slide.classList.remove('visivel');
-        await esperar(CONFIG.imageFadeMs);
-
-        // O slideshow pode durar mais que o watchdog se houver muitas imagens.
-        lastTick = Date.now();
-    }
-
     slideshow.classList.remove('visivel');
     slideshow.setAttribute('aria-hidden', 'true');
-    await esperar(CONFIG.imageFadeMs);
+    await esperar(CONFIG.fadeMs);
     slide.removeAttribute('src');
 }
 
@@ -374,7 +383,7 @@ function retomarScroll() {
 // ------------------------------------------------------------------- ciclo
 
 function fimDoCiclo() {
-    if (!CONFIG.slideshowEnabled) {
+    if (!(CONFIG.slides || []).length) {
         if (CONFIG.reloadOnCycleEnd) {
             recarregarDashboard();
         } else {
@@ -385,13 +394,13 @@ function fimDoCiclo() {
         return;
     }
 
-    // Quem dispara o reload do dashboard é o slideshow, depois que o overlay
-    // cobre a tela (ou na hora, se não houver imagem nenhuma para exibir).
+    // Quem dispara o reload do dashboard é a sequência de slides, depois que o
+    // overlay cobre a tela (ou na hora, se nenhum slide puder ser exibido).
     phase = 'slideshow';
     slideshowAtivo = true;
 
-    rodarSlideshow()
-        .catch(function () { /* nunca deixa o painel preso no slideshow */ })
+    rodarSlides()
+        .catch(function () { /* nunca deixa o painel preso nos slides */ })
         .then(retomarScroll);
 }
 
@@ -463,6 +472,10 @@ setInterval(function () {
 document.addEventListener('visibilitychange', function () {
     if (!document.hidden) lastTick = Date.now();
 });
+
+// A TV não muda de tamanho, mas o zoom do Chromium sim — e ele altera o
+// viewport em px CSS, que é o que a escala do slide usa.
+window.addEventListener('resize', ajustarEscalaSlide);
 
 // A altura precisa estar aplicada ANTES do dashboard carregar: se ele carregar
 // dentro de um iframe curto, se desenha errado.

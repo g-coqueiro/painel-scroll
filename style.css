@@ -25,6 +25,7 @@ body {
 #slideshow {
     position: fixed;
     inset: 0;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -42,10 +43,13 @@ body {
     transition: opacity var(--fade-ms) ease, visibility 0s;
 }
 
+/* Tamanho e escala sao definidos pelo app.js: o iframe fica na resolucao
+   nativa do slide e e encolhido por transform para caber na tela. */
 #slide {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+    border: 0;
+    flex: none;
+    transform-origin: center center;
+    background-color: var(--fundo);
     opacity: 0;
     transition: opacity var(--fade-ms) ease;
 }

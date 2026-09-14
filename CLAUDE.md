@@ -53,10 +53,10 @@ Fases 1 e 2 no ar no RPi desde 2026-09-14.
     reconferida 1×/s durante o scroll; escrita no elemento só quando muda.
   - `fixo`: sem permissão (navegador comum, GitHub Pages), usa `CONFIG.fallbackHeightPx`.
     É o fallback do §3.5.
-- Slideshow entre ciclos, lendo `images/manifest.json`; manifest vazio, ausente ou corrompido
-  faz o painel pular o slideshow em silêncio.
-- `scripts/kiosk.sh` (boot) e `scripts/sync-images.sh` (rclone + manifest) versionados.
-- `README.md` com instalação no RPi, setup do rclone e diagnóstico.
+- Slides HTML entre os ciclos (§5.3), listados em `CONFIG.slides`; slide ausente ou que
+  não carrega é pulado em silêncio.
+- `scripts/kiosk.sh` (boot) e `scripts/serve.py` (servidor sem cache) versionados.
+- `README.md` com instalação no RPi, regras dos slides e diagnóstico.
 
 **Estado anterior, para referência** (o que a Fase 1 resolveu): um `index.html` de ~140 linhas
 com `height` fixo no CSS e duplicado numa constante JS (7692px, medido à mão no console do
@@ -195,61 +195,32 @@ iframe, carregada com `--load-extension=`. Mesma lógica, sem o iframe no meio.
 **Descartado:** sidecar com Playwright medindo a altura e gravando JSON (pesado para o RPi, resolve
 o sintoma e não a causa).
 
-### 5.3 Slideshow de imagens — Fase 2
+### 5.3 Slides — Fase 2 (revista em 2026-09-14)
 
-Fonte das imagens: **pasta compartilhada no Google Drive** (decidido). Sobem imagens tanto o
-dono do conteúdo quanto o dono do código.
-
-```
-[Google Drive: pasta compartilhada]
-        │  scripts/sync-images.sh via cron a cada 5 min (usuário gcoqueiro):
-        │    rclone sync gdrive:<pasta> ~/painel-scroll/images --include "*.{jpg,jpeg,png,webp}"
-        │    gera images/manifest.json (lista ordenada de nomes + mtime)
-        ▼
-/home/gcoqueiro/painel-scroll/images/*.jpg|png|webp   (pasta no .gitignore)
-        │
-        ▼
-index.html faz fetch('/images/manifest.json') e exibe cada imagem N segundos
-```
-
-Notas de setup do rclone:
-- O remote do Drive precisa de OAuth uma única vez. O RPi é headless: rodar `rclone authorize
-  "drive"` em um PC com navegador e colar o token no `rclone config` do RPi.
-- Usar a conta de quem tem acesso à pasta compartilhada; para pasta de outra pessoa, configurar
-  o remote com `shared_with_me = true` ou apontar pelo ID da pasta (`root_folder_id`).
-- Token do rclone fica em `~/.config/rclone/rclone.conf`, fora do repo.
-- `manifest.json` é regenerado a cada sync; a página relê o manifest no início de cada slideshow,
-  então imagem nova aparece em ≤ 5 min + 1 ciclo de scroll.
-
-Comportamento do painel (loop):
+**Decisão revista:** a Fase 2 foi entregue com imagens vindas do Google Drive via rclone e,
+no mesmo dia, substituída por **páginas HTML versionadas no repositório**. O usuário pediu
+explicitamente para não deixar aberto "o que vai de imagem no sistema".
 
 ```
-1. Scroll do dashboard: desce → sobe (CONFIG.scrollDurationMs por sentido)
-2. Lê o manifest (dashboard ainda parado no topo, nada recarregando)
-   ├─ vazio/inacessível → recarrega o dashboard e volta ao passo 1
-   └─ com imagens → segue
-3. Overlay entra em fade
-4. Reload do iframe do dashboard ATRÁS do overlay (pega gráficos novos)
-5. Slideshow: cada imagem por CONFIG.imageDurationMs, tela cheia,
-   object-fit: contain, fundo #EDF1F6 (mesmo do dashboard). Fade simples.
-6. Overlay sai; o dashboard já está carregado. Volta ao passo 1
+slides/*.html  →  CONFIG.slides (app.js)  →  exibidos entre os ciclos de scroll
 ```
 
-O reload no passo 4 (e não depois do slideshow, como estava planejado) é deliberado: o
-iframe leva segundos para recarregar e piscaria em branco na frente de todo mundo. Atrás
-do overlay, some.
+- Cada slide é um HTML autocontido de 1920×1080 com layout fixo. O painel mantém o iframe
+  nessa resolução e o encolhe por `transform: scale()` para caber na janela — necessário
+  por causa do zoom do kiosk (§4.2).
+- Duração por slide em `CONFIG.slides[].durationMs` (hoje 45 s cada).
+- Slide ausente ou que não carrega é pulado em silêncio; lista vazia = só dashboard.
+- Publicar um slide novo = commit + `git pull` no RPi.
 
-Regras:
-- Manifest vazio ou inacessível → pula o slideshow silenciosamente, não quebra o loop.
-- Ordem: alfabética pelo nome do arquivo (o colega controla a ordem com prefixo `01_`, `02_`...).
-- Parâmetros (durações, caminho do manifest, URL do dashboard) centralizados em um único objeto
-  `CONFIG` no topo do `app.js` — nunca espalhados.
-- Imagem que não carrega é pulada; manifest corrompido é tratado como vazio. Tanto o fetch do
-  manifest quanto cada imagem têm timeout: sem isso, um arquivo que nunca responde deixaria a
-  TV presa no slideshow para sempre.
+**Consequência para o §2:** isto inverte o princípio de produto. O dono do conteúdo não
+adiciona mais nada sozinho — passa pelo dono do código. Foi uma escolha consciente do
+usuário, trocando autonomia por controle editorial. Se um dia o volume de slides crescer
+a ponto de virar gargalo, reabrir a discussão (o código do sync por Drive está no
+histórico do git, em `scripts/sync-images.sh`, removido no commit desta mudança).
 
-Descartado: pasta `images/` no repo listada pela API do GitHub (exigiria conta GitHub do dono do
-conteúdo e tem atraso de deploy).
+**Descartado:** pasta `images/` sincronizada do Drive por rclone (implementada e
+funcionando, mas abandonada por decisão editorial); pasta `images/` no repo listada pela
+API do GitHub (exigiria conta GitHub do dono do conteúdo).
 
 ### 5.4 Dashboard próprio — Fase 3 (não iniciar)
 
@@ -292,13 +263,10 @@ Entregas da Fase 2:
 
 Perguntar ao usuário antes de assumir:
 
-- [ ] **Prazo real: o `client_id` compartilhado do rclone é aposentado "durante 2026".**
-      Configurado em 2026-09-14 usando o compartilhado, para não travar a entrega. Quando
-      cair, o sync para e o slideshow congela **em silêncio** — o dashboard continua
-      rolando, então ninguém percebe. Migrar para `client_id` próprio (Google Cloud
-      Console) antes disso. Armadilha da migração: app em modo "Testing" faz o Google
-      expirar o refresh token a cada 7 dias; é preciso publicar o app.
-      Vigiar com `tail ~/sync-images.log`.
+- [x] ~~Prazo do `client_id` compartilhado do rclone~~ — deixou de importar em 2026-09-14,
+      quando o rclone saiu do projeto (§5.3). Se o sync por Drive voltar um dia, o prazo
+      volta junto: o `client_id` compartilhado é aposentado durante 2026, e a falha é
+      silenciosa (o painel continua rolando, só as imagens congelam).
 
 - [ ] A página do whitebox atualiza sozinha (websocket/polling) ou precisa de reload para
       mostrar gráficos novos? Enquanto não souber, assumir que precisa e recarregar o iframe
@@ -332,6 +300,8 @@ Perguntar ao usuário antes de assumir:
 | 2026-09-14 | Dashboard próprio adiado (Fase 3) | Manter controle de conteúdo com o responsável pela eficiência energética |
 | 2026-09-14 | Descartado scraping do DOM do whitebox | Frágil e não dá autonomia a ninguém |
 | 2026-09-14 | Imagens via Google Drive + rclone no RPi | Ambos os donos usam Drive; sem chave exposta; alternativa via repo GitHub descartada |
+| 2026-09-14 | **Revertido:** rclone/Drive sai, entram slides HTML versionados (§5.3) | Escolha editorial do usuário: controlar o que entra em vez de deixar a pasta aberta. Custo assumido: inverte o princípio do §2 |
+| 2026-09-14 | Slides em iframe de 1920×1080 encolhido por `transform: scale()` | Layout fixo precisa da resolução nativa para se desenhar certo; a escala resolve o zoom do kiosk sem tocar no HTML do slide |
 | 2026-09-14 | Slideshow entre ciclos de scroll | Escolha do usuário |
 | 2026-09-14 | Documentada a cadeia de boot atual (§4.1) | Evitar quebrar autostart/pgrep/Preferences ao migrar para localhost |
 | 2026-09-14 | URL do kiosk passa a ser `http://localhost:8080/?painel-scroll-kiosk` | Mantém o pgrep atual funcionando sem alterar o loop |
