@@ -35,6 +35,7 @@ const CONFIG = {
     // Lista vazia = sem slides; o painel só rola o dashboard.
     slides: [
         { src: 'slides/banner-novel.html', durationMs: 20000 },
+        { src: 'slides/novel-pequenos-passos.html', durationMs: 20000 },
         { src: 'slides/kaizen-spda-g09-g10.html', durationMs: 45000 },
         { src: 'slides/kaizen-portoes-g09-g11.html', durationMs: 45000 },
         { src: 'slides/kaizen-portao-transformadores-g10.html', durationMs: 45000 },
